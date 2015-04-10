@@ -1,0 +1,3 @@
+[submodule "src/ss"]
+	path = src/ss
+	url = https://github.com/soba1104/ss.git
