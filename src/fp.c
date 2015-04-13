@@ -3,8 +3,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 
 #include <unistd.h>
+#include <sys/types.h>
+#include <fcntl.h>
 
 #include <assert.h>
 #include <errno.h>
@@ -19,6 +22,9 @@
 #define FP_CMD(name) (*((uint64_t*)(name)))
 #define FP_CMD_OPEN FP_CMD("open\0\0\0\0")
 
+#define OPEN_FLAG_RDONLY (0x01 << 0)
+#define OPEN_FLAG_WRONLY (0x01 << 1)
+
 typedef struct __fp_session {
     int sd;
     int fd;
@@ -31,6 +37,7 @@ typedef struct __fp_session {
 
 typedef struct __fp_cmd_open {
     unsigned int len;
+    unsigned int flags;
     char *path;
 } fp_cmd_open;
 
@@ -38,7 +45,7 @@ typedef union __fp_cmd {
     fp_cmd_open open;
 } fp_cmd;
 
-static bool readn(fp_session *session, char *buf, int n) {
+static bool readn(fp_session *session, void *buf, int n) {
     int sd = session->sd;
     int ret = read(sd, buf, n);
     ss_logger *logger = session->logger;
@@ -62,6 +69,71 @@ static uint64_t readcmd(fp_session *session) {
     }
 }
 
+static bool session_process_open(fp_session *session) {
+    char *buf = session->buf;
+    char *path = NULL;
+    ss_logger *logger = session->logger;
+    unsigned int len, flags_fp;
+    int fd = -1, flags_sys = 0;
+
+    if (!readn(session, &len, sizeof(unsigned int))) {
+        ss_err(logger, "failed to read open path length\n");
+        goto err;
+    }
+    len = ntohl(len);
+
+    if (!readn(session, &flags_fp, sizeof(unsigned int))) {
+        ss_err(logger, "failed to read open flags\n");
+        goto err;
+    }
+    flags_fp = ntohl(flags_fp);
+    if (flags_fp & OPEN_FLAG_RDONLY) {
+        flags_sys |= O_RDONLY;
+    } else if (flags_fp & OPEN_FLAG_WRONLY) {
+        flags_sys |= O_WRONLY;
+    } else {
+        ss_err(logger, "invalid open flags %x\n", flags_fp);
+        goto err;
+    }
+
+    assert(buf);
+    if (!readn(session, buf, len)) {
+        ss_err(logger, "failed to read open path\n");
+        goto err;
+    }
+
+    path = malloc(len + 1);
+    if (!path) {
+        ss_err(logger, "failed to allocate memory: %s\n", strerror(errno));
+        goto err;
+    }
+    memcpy(path, buf, len);
+    path[len] = '\0';
+
+    fd = open(path, flags_sys);
+    if (fd < 0) {
+        ss_err(logger, "failed to open %s: %s\n", path, strerror(errno));
+        goto err;
+    }
+
+    assert(!session->path);
+    assert(session->fd < 0);
+    session->fd = fd;
+    session->path = path;
+
+    return true;
+
+err:
+    if (path) {
+        free(path);
+    }
+    if (fd >= 0) {
+        close(fd);
+    }
+
+    return false;
+}
+
 static bool session_start(fp_session *session) {
     uint64_t cmd = 0;
     ss_logger *logger = session->logger;
@@ -73,6 +145,10 @@ static bool session_start(fp_session *session) {
     }
 
     if (cmd == FP_CMD_OPEN) {
+        if (!session_process_open(session)) {
+            ss_err(logger, "open failed\n");
+            goto err;
+        }
     } else {
         ss_err(logger, "unexpected command given: command = %llx\n", cmd);
         goto err;
