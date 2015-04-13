@@ -22,6 +22,9 @@
 #define FP_CMD(name) (*((uint64_t*)(name)))
 #define FP_CMD_OPEN FP_CMD("open\0\0\0\0")
 #define FP_CMD_CREATE FP_CMD("create\0\0")
+#define FP_CMD_READ FP_CMD("read\0\0\0\0")
+#define FP_CMD_WRITE FP_CMD("write\0\0\0")
+#define FP_CMD_SEEK FP_CMD("seek\0\0\0\0")
 
 #define OPEN_FLAG_RDONLY (0x01 << 0)
 #define OPEN_FLAG_WRONLY (0x01 << 1)
@@ -201,9 +204,6 @@ static bool session_start(fp_session *session) {
         goto err;
     }
 
-    // TODO パスの読み込み & path へのコピー & ファイルの open
-    // TODO 読み書きモードの設定
-
     return true;
 
 err:
@@ -232,16 +232,20 @@ static void cbk(ss_logger *logger, int sd, void *arg) {
         return;
     }
 
+    // TODO
+    // 3: ループ内でコマンド(read, write, seek, close)を解釈
+    // 4: close コマンドが来るか client からの read で eof が返るまでループ継続
+
 err:
     if (session.buf) {
         free(session.buf);
     }
-
-    // TODO
-    // 1: パスを読み込む
-    // 2: 読み込んだパスに従って open & 構造体初期化
-    // 3: ループ内でコマンド(read, write, seek, close)を解釈
-    // 4: close コマンドが来るか client からの read で eof が返るまでループ継続
+    if (session.path) {
+        free(session.path);
+    }
+    if (session.fd >= 0) {
+        close(session.fd);
+    }
 }
 
 int main(void) {
