@@ -38,24 +38,35 @@ typedef union __fp_cmd {
     fp_cmd_open open;
 } fp_cmd;
 
-static uint64_t readcmd(int sd) {
-    char buf[FP_CMD_NAME_LEN];
-    int ret = read(sd, buf, FP_CMD_NAME_LEN);
+static bool readn(fp_session *session, char *buf, int n) {
+    int sd = session->sd;
+    int ret = read(sd, buf, n);
+    ss_logger *logger = session->logger;
 
     // TODO 0 か -1 を返すまで読み込みを繰り返す。
-    if (ret < FP_CMD_NAME_LEN) {
+    if (ret < n) {
+        ss_err(logger, "failed to read %d bytes from client\n", n);
+        return false;
+    } else {
+        return true;
+    }
+}
+
+static uint64_t readcmd(fp_session *session) {
+    char buf[FP_CMD_NAME_LEN];
+
+    if (readn(session, buf, FP_CMD_NAME_LEN)) {
+        return FP_CMD(buf);
+    } else {
         return 0;
     }
-
-    return FP_CMD(buf);
 }
 
 static bool session_start(fp_session *session) {
     uint64_t cmd = 0;
     ss_logger *logger = session->logger;
-    int sd = session->sd;
 
-    cmd = readcmd(sd);
+    cmd = readcmd(session);
     if (!cmd) {
         ss_err(logger, "failed to read command\n");
         goto err;
