@@ -21,6 +21,7 @@
 #define FP_CMD_NAME_LEN sizeof(uint64_t)
 #define FP_CMD(name) (*((uint64_t*)(name)))
 #define FP_CMD_OPEN FP_CMD("open\0\0\0\0")
+#define FP_CMD_CREATE FP_CMD("create\0\0")
 
 #define OPEN_FLAG_RDONLY (0x01 << 0)
 #define OPEN_FLAG_WRONLY (0x01 << 1)
@@ -34,16 +35,6 @@ typedef struct __fp_session {
     int bufidx;
     ss_logger *logger;
 } fp_session;
-
-typedef struct __fp_cmd_open {
-    unsigned int len;
-    unsigned int flags;
-    char *path;
-} fp_cmd_open;
-
-typedef union __fp_cmd {
-    fp_cmd_open open;
-} fp_cmd;
 
 static bool readn(fp_session *session, void *buf, int n) {
     int sd = session->sd;
@@ -134,6 +125,57 @@ err:
     return false;
 }
 
+static bool session_process_create(fp_session *session) {
+    char *buf = session->buf;
+    char *path = NULL;
+    ss_logger *logger = session->logger;
+    unsigned int len;
+    int fd = -1;
+
+    if (!readn(session, &len, sizeof(unsigned int))) {
+        ss_err(logger, "failed to read create path length\n");
+        goto err;
+    }
+    len = ntohl(len);
+
+    assert(buf);
+    if (!readn(session, buf, len)) {
+        ss_err(logger, "failed to read create path\n");
+        goto err;
+    }
+
+    path = malloc(len + 1);
+    if (!path) {
+        ss_err(logger, "failed to allocate memory: %s\n", strerror(errno));
+        goto err;
+    }
+    memcpy(path, buf, len);
+    path[len] = '\0';
+
+    fd = open(path, O_WRONLY | O_CREAT | O_EXCL);
+    if (fd < 0) {
+        ss_err(logger, "failed to create %s: %s\n", path, strerror(errno));
+        goto err;
+    }
+
+    assert(!session->path);
+    assert(session->fd < 0);
+    session->fd = fd;
+    session->path = path;
+
+    return true;
+
+err:
+    if (path) {
+        free(path);
+    }
+    if (fd >= 0) {
+        close(fd);
+    }
+
+    return false;
+}
+
 static bool session_start(fp_session *session) {
     uint64_t cmd = 0;
     ss_logger *logger = session->logger;
@@ -147,6 +189,11 @@ static bool session_start(fp_session *session) {
     if (cmd == FP_CMD_OPEN) {
         if (!session_process_open(session)) {
             ss_err(logger, "open failed\n");
+            goto err;
+        }
+    } else if (cmd == FP_CMD_CREATE) {
+        if (!session_process_create(session)) {
+            ss_err(logger, "create failed\n");
             goto err;
         }
     } else {
