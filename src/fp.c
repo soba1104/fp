@@ -26,6 +26,7 @@ typedef struct __fp_session {
     char *buf;
     int bufsize;
     int bufidx;
+    ss_logger *logger;
 } fp_session;
 
 typedef struct __fp_cmd_open {
@@ -49,15 +50,10 @@ static uint64_t readcmd(int sd) {
     return FP_CMD(buf);
 }
 
-static bool session_start(fp_session *session, int sd, ss_logger *logger) {
-    char *buf = NULL;
+static bool session_start(fp_session *session) {
     uint64_t cmd = 0;
-
-    buf = malloc(FP_DEFAULT_BUFSIZE);
-    if (!buf) {
-        ss_err(logger, "failed to allocate client buffer\n");
-        goto err;
-    }
+    ss_logger *logger = session->logger;
+    int sd = session->sd;
 
     cmd = readcmd(sd);
     if (!cmd) {
@@ -74,27 +70,37 @@ static bool session_start(fp_session *session, int sd, ss_logger *logger) {
     // TODO パスの読み込み & path へのコピー & ファイルの open
     // TODO 読み書きモードの設定
 
-    session->sd = sd;
-    session->buf = buf;
-
     return true;
 
 err:
-    if (buf) {
-        free(buf);
-    }
-
     return false;
 }
 
 static void cbk(ss_logger *logger, int sd, void *arg) {
     fp_session session;
 
+    session.logger = logger;
+    session.sd = sd;
+    session.fd = -1;
+    session.path = NULL;
+    session.bufsize = 0;
+    session.bufidx = 0;
+    session.buf = malloc(FP_DEFAULT_BUFSIZE);
+    if (!session.buf) {
+        ss_err(logger, "failed to allocate client buffer\n");
+        goto err;
+    }
+
     ss_info(logger, "starting new session...\n");
 
-    if (!session_start(&session, sd, logger)) {
+    if (!session_start(&session)) {
         ss_err(logger, "failed to start session\n");
         return;
+    }
+
+err:
+    if (session.buf) {
+        free(session.buf);
     }
 
     // TODO
