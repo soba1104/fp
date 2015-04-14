@@ -29,6 +29,8 @@
 #define OPEN_FLAG_RDONLY (0x01 << 0)
 #define OPEN_FLAG_WRONLY (0x01 << 1)
 
+#define min(a, b) ((a) < (b) ? (a) : (b))
+
 typedef struct __fp_session {
     int sd;
     int fd;
@@ -63,6 +65,12 @@ static uint64_t readcmd(fp_session *session) {
     }
 }
 
+/**
+ * command: open\0\0\0\0 の8バイト固定
+ * pathlen: pathの長さ、4バイト
+ * flags: openのモードなどのflag群、4バイト
+ * path: path文字列
+ */
 static bool session_process_open(fp_session *session) {
     char *buf = session->buf;
     char *path = NULL;
@@ -128,6 +136,11 @@ err:
     return false;
 }
 
+/**
+ * command: create\0\0 の8バイト固定
+ * pathlen: pathの長さ、4バイト
+ * path: path文字列
+ */
 static bool session_process_create(fp_session *session) {
     char *buf = session->buf;
     char *path = NULL;
@@ -186,10 +199,40 @@ static bool session_process_read(fp_session *session) {
     return false;
 }
 
+/**
+ * command: write\0\0\0 の8バイト固定
+ * datalen: dataの長さ、4バイト
+ * data: writeするデータ
+ */
 static bool session_process_write(fp_session *session) {
-    // TODO
+    char *buf = session->buf;
+    int bufsize = session->bufsize;
+    int fd = session->fd;
     ss_logger *logger = session->logger;
-    ss_err(logger, "session_process_write: not implemented\n");
+    unsigned int len, idx;
+
+    if (!readn(session, &len, sizeof(unsigned int))) {
+        ss_err(logger, "failed to read write data length\n");
+        goto err;
+    }
+    len = ntohl(len);
+
+    assert(buf);
+    for (idx = 0; idx < len; idx += bufsize) {
+        int s = min(len - idx, bufsize);
+        if (!readn(session, buf, s)) {
+            ss_err(logger, "failed to read write data\n");
+            goto err;
+        }
+        if (write(fd, buf, s) < 0) {
+            ss_err(logger, "failed to write data: %s\n", strerror(errno));
+            goto err;
+        }
+    }
+
+    return true;
+
+err:
     return false;
 }
 
@@ -239,7 +282,7 @@ static void cbk(ss_logger *logger, int sd, void *arg) {
     session.sd = sd;
     session.fd = -1;
     session.path = NULL;
-    session.bufsize = 0;
+    session.bufsize = FP_DEFAULT_BUFSIZE;
     session.bufidx = 0;
     session.buf = malloc(FP_DEFAULT_BUFSIZE);
     if (!session.buf) {
