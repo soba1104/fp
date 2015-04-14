@@ -289,27 +289,38 @@ out:
 
 int main(int argc, char **argv) {
     int port;
+    ss_ctx *ctx = NULL;
 
     if (argc < 2) {
         fprintf(stderr, "usage:   fp port\n");
         fprintf(stderr, "example: fp 1234\n");
-        return 0;
+        goto err;
     }
 
     port = atoi(argv[1]);
     if (port <= 0) {
         fprintf(stderr, "invalid port number %d\n", port);
         fprintf(stderr, "port number must be greater than 0\n");
-        return -1;
+        goto err;
     }
     if (port >= 65536) {
         fprintf(stderr, "invalid port number %d\n", port);
         fprintf(stderr, "port number must be less than 65536\n");
-        return -1;
+        goto err;
     }
 
-    ss_ctx *ctx = ss_new(cbk, NULL);
-    ss_run(ctx, port);
+    ctx = ss_new(cbk, NULL);
+    if (!ss_run(ctx, port)) {
+        fprintf(stderr, "failed to start server\n");
+        goto err;
+    }
     ss_free(ctx);
+
     return 0;
+
+err:
+    if (ctx) {
+        ss_free(ctx);
+    }
+    return -1;
 }
