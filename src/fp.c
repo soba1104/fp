@@ -192,6 +192,10 @@ err:
     return false;
 }
 
+/**
+ * command: read\0\0\0\0 の8バイト固定
+ * len: 読み込む長さ、4バイト
+ */
 static bool session_process_read(fp_session *session) {
     // TODO
     ss_logger *logger = session->logger;
@@ -236,6 +240,11 @@ err:
     return false;
 }
 
+/**
+ * command: seek\0\0\0\0 の8バイト固定
+ * type: seek のタイプ、4バイト
+ * offset: シーク先のオフセット、4バイト
+ */
 static bool session_process_seek(fp_session *session) {
     // TODO
     ss_logger *logger = session->logger;
