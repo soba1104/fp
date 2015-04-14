@@ -179,6 +179,27 @@ err:
     return false;
 }
 
+static bool session_process_read(fp_session *session) {
+    // TODO
+    ss_logger *logger = session->logger;
+    ss_err(logger, "session_process_read: not implemented\n");
+    return false;
+}
+
+static bool session_process_write(fp_session *session) {
+    // TODO
+    ss_logger *logger = session->logger;
+    ss_err(logger, "session_process_write: not implemented\n");
+    return false;
+}
+
+static bool session_process_seek(fp_session *session) {
+    // TODO
+    ss_logger *logger = session->logger;
+    ss_err(logger, "session_process_seek: not implemented\n");
+    return false;
+}
+
 static bool session_start(fp_session *session) {
     uint64_t cmd = 0;
     ss_logger *logger = session->logger;
@@ -212,6 +233,7 @@ err:
 
 static void cbk(ss_logger *logger, int sd, void *arg) {
     fp_session session;
+    uint64_t cmd = 0;
 
     session.logger = logger;
     session.sd = sd;
@@ -222,21 +244,38 @@ static void cbk(ss_logger *logger, int sd, void *arg) {
     session.buf = malloc(FP_DEFAULT_BUFSIZE);
     if (!session.buf) {
         ss_err(logger, "failed to allocate client buffer\n");
-        goto err;
+        goto out;
     }
 
     ss_info(logger, "starting new session...\n");
-
     if (!session_start(&session)) {
         ss_err(logger, "failed to start session\n");
-        return;
+        goto out;
     }
 
-    // TODO
-    // 3: ループ内でコマンド(read, write, seek, close)を解釈
-    // 4: close コマンドが来るか client からの read で eof が返るまでループ継続
+    while ((cmd = readcmd(&session)) != 0) {
+        if (cmd == FP_CMD_READ) {
+            if (!session_process_read(&session)) {
+                ss_err(logger, "failed to process read command\n");
+                goto out;
+            }
+        } else if (cmd == FP_CMD_WRITE) {
+            if (!session_process_write(&session)) {
+                ss_err(logger, "failed to process write command\n");
+                goto out;
+            }
+        } else if (cmd == FP_CMD_SEEK) {
+            if (!session_process_seek(&session)) {
+                ss_err(logger, "failed to process seek command\n");
+                goto out;
+            }
+        } else {
+            ss_err(logger, "unknown command given, cmd = %x\n", cmd);
+            goto out;
+        }
+    }
 
-err:
+out:
     if (session.buf) {
         free(session.buf);
     }
