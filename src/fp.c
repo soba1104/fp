@@ -287,9 +287,29 @@ out:
     }
 }
 
-int main(void) {
+int main(int argc, char **argv) {
+    int port;
+
+    if (argc < 2) {
+        fprintf(stderr, "usage:   fp port\n");
+        fprintf(stderr, "example: fp 1234\n");
+        return 0;
+    }
+
+    port = atoi(argv[1]);
+    if (port <= 0) {
+        fprintf(stderr, "invalid port number %d\n", port);
+        fprintf(stderr, "port number must be greater than 0\n");
+        return -1;
+    }
+    if (port >= 65536) {
+        fprintf(stderr, "invalid port number %d\n", port);
+        fprintf(stderr, "port number must be less than 65536\n");
+        return -1;
+    }
+
     ss_ctx *ctx = ss_new(cbk, NULL);
-    ss_run(ctx, 1234);
+    ss_run(ctx, port);
     ss_free(ctx);
     return 0;
 }
