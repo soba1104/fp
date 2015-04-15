@@ -56,6 +56,20 @@ static bool readn(fp_session *session, void *buf, int n) {
     }
 }
 
+static bool writen(fp_session *session, void *buf, int n) {
+    int sd = session->sd;
+    int ret = write(sd, buf, n);
+    ss_logger *logger = session->logger;
+
+    // TODO -1 を返すまで書き込みを繰り返す。
+    if (ret < n) {
+        ss_err(logger, "failed to write %d bytes to client\n", n);
+        return false;
+    } else {
+        return true;
+    }
+}
+
 static uint64_t readcmd(fp_session *session) {
     char buf[FP_CMD_NAME_LEN];
 
@@ -198,9 +212,45 @@ err:
  * len: 読み込む長さ、4バイト
  */
 static bool session_process_read(fp_session *session) {
-    // TODO
+    char *buf = session->buf;
+    int bufsize = session->bufsize;
+    int fd = session->fd;
     ss_logger *logger = session->logger;
-    ss_err(logger, "session_process_read: not implemented\n");
+    unsigned int len, idx;
+
+    if (!readn(session, &len, sizeof(unsigned int))) {
+        ss_err(logger, "failed to read read length\n");
+        goto err;
+    }
+    len = ntohl(len);
+
+    assert(buf);
+    for (idx = 0; idx < len; idx += bufsize) {
+        int s = min(len - idx, bufsize);
+        int reth = read(fd, buf, s);
+        int retn = htonl(reth);
+
+        if (reth < 0) {
+            ss_err(logger, "failed to read data: %s\n", strerror(errno));
+            goto err;
+        }
+        // TODO writev でまとめて書き込む
+        if (!writen(session, &retn, sizeof(retn))) {
+            ss_err(logger, "failed to response chunk size\n", strerror(errno));
+            goto err;
+        }
+        if (reth == 0) { // EOF
+            break;
+        }
+        if (!writen(session, buf, reth)) {
+            ss_err(logger, "failed to response read chunk\n", strerror(errno));
+            goto err;
+        }
+    }
+
+    return true;
+
+err:
     return false;
 }
 
