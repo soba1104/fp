@@ -25,6 +25,7 @@
 #define FP_CMD_READ FP_CMD("read\0\0\0\0")
 #define FP_CMD_WRITE FP_CMD("write\0\0\0")
 #define FP_CMD_SEEK FP_CMD("seek\0\0\0\0")
+#define FP_CMD_CLOSE FP_CMD("close\0\0\0")
 
 #define OPEN_FLAG_RDONLY (0x01 << 0)
 #define OPEN_FLAG_WRONLY (0x01 << 1)
@@ -299,7 +300,6 @@ static void cbk(ss_logger *logger, int sd, void *arg) {
         goto out;
     }
 
-    ss_info(logger, "starting new session...\n");
     if (!session_start(&session)) {
         ss_err(logger, "failed to start session\n");
         goto out;
@@ -321,6 +321,8 @@ static void cbk(ss_logger *logger, int sd, void *arg) {
                 ss_err(logger, "failed to process seek command\n");
                 goto out;
             }
+        } else if (cmd == FP_CMD_CLOSE) {
+            goto out;
         } else {
             ss_err(logger, "unknown command given, cmd = %x\n", cmd);
             goto out;
