@@ -36,6 +36,29 @@
 
 #define min(a, b) ((a) < (b) ? (a) : (b))
 
+#ifndef ntohll
+static inline bool is_little_endian(void) {
+    static const uint8_t d[4] = {0x01, 0x02, 0x03, 0x04};
+    uint32_t h = *((uint32_t*)(d));
+    uint32_t le = 0x04030201;
+    return h == le;
+}
+
+static inline uint64_t ntohll(uint64_t n) {
+    if (is_little_endian()) {
+        uint8_t *nv = (uint8_t*)(&n);
+        uint8_t hv[8];
+        int i;
+        for (i = 0; i < 8; i++) {
+            hv[8 - i - 1] = nv[i];
+        }
+        return *((uint64_t*)(hv));
+    } else {
+        return n;
+    }
+}
+#endif
+
 typedef struct __fp_session {
     int sd;
     int fd;
@@ -299,13 +322,12 @@ err:
  * command: seek\0\0\0\0 の8バイト固定
  * type: seek のタイプ、4バイト
  * offset: シーク先のオフセット、8バイト
- * TODO offset を8バイトに拡張する
  */
 static bool session_process_seek(fp_session *session) {
     int fd = session->fd;
     ss_logger *logger = session->logger;
     int whence_fp, whence_sys;
-    int32_t offset_fp;
+    int64_t offset_fp;
     off_t offset_sys;
 
     if (!readn(session, &whence_fp, sizeof(whence_fp))) {
@@ -332,12 +354,11 @@ static bool session_process_seek(fp_session *session) {
         ss_err(logger, "failed to read seek offset\n");
         goto err;
     }
-    offset_fp = ntohl(offset_fp);
+    offset_fp = ntohll(offset_fp);
     offset_sys = (off_t)offset_fp;
-
     if (lseek(fd, offset_sys, whence_sys) < 0) {
         ss_err(logger,
-               "failed to seek: whence = %d, offset = %d%s\n",
+               "failed to seek: whence = %d, offset = %lld, error = %s\n",
                whence_fp,
                offset_fp,
                strerror(errno));
