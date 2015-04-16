@@ -243,7 +243,7 @@ static bool session_process_read(fp_session *session) {
     int bufsize = session->bufsize;
     int fd = session->fd;
     ss_logger *logger = session->logger;
-    unsigned int len, idx;
+    unsigned int len, idx, fin = 0;
 
     if (!readn(session, &len, sizeof(unsigned int))) {
         ss_err(logger, "failed to read read length\n");
@@ -252,7 +252,8 @@ static bool session_process_read(fp_session *session) {
     len = ntohl(len);
 
     assert(buf);
-    for (idx = 0; idx < len; idx += bufsize) {
+    idx = 0;
+    while (idx < len) {
         int s = min(len - idx, bufsize);
         int reth = read(fd, buf, s);
         int retn = htonl(reth);
@@ -261,18 +262,23 @@ static bool session_process_read(fp_session *session) {
             ss_err(logger, "failed to read data: %s\n", strerror(errno));
             goto err;
         }
+        if (reth == 0) { // EOF
+            break;
+        }
         // TODO writev でまとめて書き込む
         if (!writen(session, &retn, sizeof(retn))) {
             ss_err(logger, "failed to response chunk size\n", strerror(errno));
             goto err;
         }
-        if (reth == 0) { // EOF
-            break;
-        }
         if (!writen(session, buf, reth)) {
             ss_err(logger, "failed to response read chunk\n", strerror(errno));
             goto err;
         }
+        idx += reth;
+    }
+    if (!writen(session, &fin, sizeof(fin))) {
+        ss_err(logger, "failed to response read end marker\n", strerror(errno));
+        goto err;
     }
 
     return true;
