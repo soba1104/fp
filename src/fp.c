@@ -30,6 +30,10 @@
 #define OPEN_FLAG_RDONLY (0x01 << 0)
 #define OPEN_FLAG_WRONLY (0x01 << 1)
 
+#define FP_SEEK_WHENCE_SET 1
+#define FP_SEEK_WHENCE_CUR 2
+#define FP_SEEK_WHENCE_END 3
+
 #define min(a, b) ((a) < (b) ? (a) : (b))
 
 typedef struct __fp_session {
@@ -294,12 +298,55 @@ err:
 /**
  * command: seek\0\0\0\0 の8バイト固定
  * type: seek のタイプ、4バイト
- * offset: シーク先のオフセット、4バイト
+ * offset: シーク先のオフセット、8バイト
+ * TODO offset を8バイトに拡張する
  */
 static bool session_process_seek(fp_session *session) {
-    // TODO
+    int fd = session->fd;
     ss_logger *logger = session->logger;
-    ss_err(logger, "session_process_seek: not implemented\n");
+    int whence_fp, whence_sys;
+    int32_t offset_fp;
+    off_t offset_sys;
+
+    if (!readn(session, &whence_fp, sizeof(whence_fp))) {
+        ss_err(logger, "failed to read seek whence\n");
+        goto err;
+    }
+    whence_fp = ntohl(whence_fp);
+    switch (whence_fp) {
+        case FP_SEEK_WHENCE_SET:
+            whence_sys = SEEK_SET;
+            break;
+        case FP_SEEK_WHENCE_CUR:
+            whence_sys = SEEK_CUR;
+            break;
+        case FP_SEEK_WHENCE_END:
+            whence_sys = SEEK_END;
+            break;
+        default:
+            ss_err(logger, "unknown whence %d\n", whence_fp);
+            break;
+    }
+
+    if (!readn(session, &offset_fp, sizeof(offset_fp))) {
+        ss_err(logger, "failed to read seek offset\n");
+        goto err;
+    }
+    offset_fp = ntohl(offset_fp);
+    offset_sys = (off_t)offset_fp;
+
+    if (lseek(fd, offset_sys, whence_sys) < 0) {
+        ss_err(logger,
+               "failed to seek: whence = %d, offset = %d%s\n",
+               whence_fp,
+               offset_fp,
+               strerror(errno));
+        goto err;
+    }
+
+    return true;
+
+err:
     return false;
 }
 
