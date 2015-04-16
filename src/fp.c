@@ -7,6 +7,7 @@
 
 #include <unistd.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <fcntl.h>
 
 #include <assert.h>
@@ -58,6 +59,41 @@ static inline uint64_t ntohll(uint64_t n) {
     }
 }
 #endif
+
+static void mkpdir(const char *path, mode_t mode) {
+    char *dir = NULL;
+    int len = strlen(path);
+    int i;
+
+    dir = malloc(len + 1);
+    if (!dir) {
+        goto out;
+    }
+    strcpy(dir, path);
+
+    for (i = len - 1; i >= 0; i--) {
+        if (dir[i] == '/') {
+            dir[i + 1] = '\0';
+            break;
+        }
+    }
+    if (i < 0) {
+        goto out;
+    }
+
+    for (i = 0; dir[i] != '\0'; i++) {
+        if (dir[i] == '/') {
+            dir[i] = '\0';
+            mkdir(dir, mode);
+            dir[i] = '/';
+        }
+    }
+
+out:
+    if (dir) {
+        free(dir);
+    }
+}
 
 typedef struct __fp_session {
     int sd;
@@ -210,7 +246,9 @@ static bool session_process_create(fp_session *session) {
     memcpy(path, buf, len);
     path[len] = '\0';
 
-    fd = open(path, O_WRONLY | O_CREAT | O_EXCL);
+    // TODO 外から mode を指定できるようにする。
+    mkpdir(path, S_IRWXU | S_IRGRP | S_IXGRP);
+    fd = open(path, O_WRONLY | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR | S_IRGRP);
     if (fd < 0) {
         ss_err(logger, "failed to create %s: %s\n", path, strerror(errno));
         goto err;
