@@ -288,14 +288,17 @@ err:
 }
 
 /**
- * command: delete\0\0 の8バイト固定
- * pathlen: pathの長さ、4バイト
- * path: path文字列
+ * - 入力
+ *  - command: delete\0\0 の8バイト固定
+ *  - pathlen: pathの長さ、4バイト
+ *  - path: path文字列
+ * - 出力
+ *  - result: 常に4バイトの0を返す。失敗時はセッションを切る。
  */
 static bool session_process_delete(fp_session *session) {
     char *buf = session->buf;
     ss_logger *logger = session->logger;
-    unsigned int len;
+    unsigned int len, response = 0;
 
     if (!readn(session, &len, sizeof(unsigned int))) {
         ss_err(logger, "failed to read delete path length\n");
@@ -312,6 +315,10 @@ static bool session_process_delete(fp_session *session) {
 
     if (unlink(buf) < 0) {
         ss_err(logger, "failed to delete %s: %s\n", buf, strerror(errno));
+        goto err;
+    }
+    if (!writen(session, &response, sizeof(response))) {
+        ss_err(logger, "failed to write delete response\n", strerror(errno));
         goto err;
     }
 
