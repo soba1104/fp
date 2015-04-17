@@ -145,17 +145,20 @@ static uint64_t readcmd(fp_session *session) {
 }
 
 /**
- * command: open\0\0\0\0 の8バイト固定
- * pathlen: pathの長さ、4バイト
- * flags: openのモードなどのflag群、4バイト
- * path: path文字列
+ * - 入力
+ *  - command: open\0\0\0\0 の8バイト固定
+ *  - pathlen: pathの長さ、4バイト
+ *  - flags: openのモードなどのflag群、4バイト
+ *  - path: path文字列
+ * - 出力
+ *  - result: 常に4バイトの0を返す。失敗時はセッションを切る。
  */
 static bool session_process_open(fp_session *session) {
     char *buf = session->buf;
     char *path = NULL;
     ss_logger *logger = session->logger;
     unsigned int len, flags_fp;
-    int fd = -1, flags_sys = 0;
+    int fd = -1, flags_sys = 0, response = 0;
 
     if (!readn(session, &len, sizeof(unsigned int))) {
         ss_err(logger, "failed to read open path length\n");
@@ -196,6 +199,10 @@ static bool session_process_open(fp_session *session) {
         ss_err(logger, "failed to open %s: %s\n", path, strerror(errno));
         goto err;
     }
+    if (!writen(session, &response, sizeof(response))) {
+        ss_err(logger, "failed to write open response\n", strerror(errno));
+        goto err;
+    }
 
     assert(!session->path);
     assert(session->fd < 0);
@@ -216,16 +223,19 @@ err:
 }
 
 /**
- * command: create\0\0 の8バイト固定
- * pathlen: pathの長さ、4バイト
- * path: path文字列
+ * - 入力
+ *  - command: create\0\0 の8バイト固定
+ *  - pathlen: pathの長さ、4バイト
+ *  - path: path文字列
+ * - 出力
+ *  - result: 常に4バイトの0を返す。失敗時はセッションを切る。
  */
 static bool session_process_create(fp_session *session) {
     char *buf = session->buf;
     char *path = NULL;
     ss_logger *logger = session->logger;
     unsigned int len;
-    int fd = -1;
+    int fd = -1, response = 0;
 
     if (!readn(session, &len, sizeof(unsigned int))) {
         ss_err(logger, "failed to read create path length\n");
@@ -252,6 +262,10 @@ static bool session_process_create(fp_session *session) {
     fd = open(path, O_WRONLY | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR | S_IRGRP);
     if (fd < 0) {
         ss_err(logger, "failed to create %s: %s\n", path, strerror(errno));
+        goto err;
+    }
+    if (!writen(session, &response, sizeof(response))) {
+        ss_err(logger, "failed to write create response\n", strerror(errno));
         goto err;
     }
 
