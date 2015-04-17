@@ -151,7 +151,8 @@ static uint64_t readcmd(fp_session *session) {
  *  - flags: openのモードなどのflag群、4バイト
  *  - path: path文字列
  * - 出力
- *  - result: 常に4バイトの0を返す。失敗時はセッションを切る。
+ *  - 常に4バイトの0を返す。
+ *  - open の失敗時はセッションを切る。
  */
 static bool session_process_open(fp_session *session) {
     char *buf = session->buf;
@@ -228,7 +229,8 @@ err:
  *  - pathlen: pathの長さ、4バイト
  *  - path: path文字列
  * - 出力
- *  - result: 常に4バイトの0を返す。失敗時はセッションを切る。
+ *  - 常に4バイトの0を返す。
+ *  - create の失敗時はセッションを切る。
  */
 static bool session_process_create(fp_session *session) {
     char *buf = session->buf;
@@ -293,7 +295,8 @@ err:
  *  - pathlen: pathの長さ、4バイト
  *  - path: path文字列
  * - 出力
- *  - result: 常に4バイトの0を返す。失敗時はセッションを切る。
+ *  - 常に4バイトの0を返す。
+ *  - delete の失敗時はセッションを切る。
  */
 static bool session_process_delete(fp_session *session) {
     char *buf = session->buf;
