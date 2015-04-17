@@ -27,6 +27,7 @@
 #define FP_CMD_WRITE FP_CMD("write\0\0\0")
 #define FP_CMD_SEEK FP_CMD("seek\0\0\0\0")
 #define FP_CMD_CLOSE FP_CMD("close\0\0\0")
+#define FP_CMD_DELETE FP_CMD("delete\0\0")
 
 #define OPEN_FLAG_RDONLY (0x01 << 0)
 #define OPEN_FLAG_WRONLY (0x01 << 1)
@@ -273,6 +274,42 @@ err:
 }
 
 /**
+ * command: delete\0\0 の8バイト固定
+ * pathlen: pathの長さ、4バイト
+ * path: path文字列
+ */
+static bool session_process_delete(fp_session *session) {
+    char *buf = session->buf;
+    ss_logger *logger = session->logger;
+    unsigned int len;
+
+    if (!readn(session, &len, sizeof(unsigned int))) {
+        ss_err(logger, "failed to read delete path length\n");
+        goto err;
+    }
+    len = ntohl(len);
+
+    assert(buf);
+    if (!readn(session, buf, len)) {
+        ss_err(logger, "failed to read delete path\n");
+        goto err;
+    }
+    buf[len] = '\0';
+
+    if (unlink(buf) < 0) {
+        ss_err(logger, "failed to delete %s: %s\n", buf, strerror(errno));
+        goto err;
+    }
+
+    return true;
+
+err:
+
+    return false;
+}
+
+
+/**
  * command: read\0\0\0\0 の8バイト固定
  * len: 読み込む長さ、4バイト
  */
@@ -435,6 +472,11 @@ static bool session_start(fp_session *session) {
             ss_err(logger, "create failed\n");
             goto err;
         }
+    } else if (cmd == FP_CMD_DELETE) {
+        if (!session_process_delete(session)) {
+            ss_err(logger, "delete failed\n");
+            goto err;
+        }
     } else {
         ss_err(logger, "unexpected command given: command = %llx\n", cmd);
         goto err;
@@ -463,7 +505,11 @@ static void cbk(ss_logger *logger, int sd, void *arg) {
     }
 
     if (!session_start(&session)) {
-        ss_err(logger, "failed to start session\n");
+        goto out;
+    }
+
+    if (session.fd < 0) {
+        // delete などの場合は特に続けて行える操作がないので接続を切る。
         goto out;
     }
 
