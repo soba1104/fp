@@ -331,8 +331,15 @@ err:
 
 
 /**
- * command: read\0\0\0\0 の8バイト固定
- * len: 読み込む長さ、4バイト
+ * - 入力
+ *  - command: read\0\0\0\0 の8バイト固定
+ *  - len: 読み込む長さ、4バイト
+ * - 出力
+ *  - 以下のチャンクを繰り返し返す。len = 0 の場合はチャンク列の末端を示す。
+ *   - チャンク長の4バイト整数
+ *   - チャンク長分のデータ
+ *  - 1つめのチャンク長が0の場合はEOFであることを示す。
+ *  - read に失敗した場合はセッションを切る。
  */
 static bool session_process_read(fp_session *session) {
     char *buf = session->buf;
