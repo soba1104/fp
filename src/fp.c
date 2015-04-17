@@ -446,7 +446,7 @@ err:
 static bool session_process_seek(fp_session *session) {
     int fd = session->fd;
     ss_logger *logger = session->logger;
-    int whence_fp, whence_sys;
+    int whence_fp, whence_sys, response = 0;
     int64_t offset_fp;
     off_t offset_sys;
 
@@ -482,6 +482,10 @@ static bool session_process_seek(fp_session *session) {
                whence_fp,
                offset_fp,
                strerror(errno));
+        goto err;
+    }
+    if (!writen(session, &response, sizeof(response))) {
+        ss_err(logger, "failed to write seek response\n", strerror(errno));
         goto err;
     }
 
