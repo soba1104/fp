@@ -439,9 +439,13 @@ err:
 }
 
 /**
- * command: seek\0\0\0\0 の8バイト固定
- * type: seek のタイプ、4バイト
- * offset: シーク先のオフセット、8バイト
+ * - 入力
+ *  - command: seek\0\0\0\0 の8バイト固定
+ *  - type: seek のタイプ、4バイト
+ *   - offset: シーク先のオフセット、8バイト
+ * - 出力
+ *  - 常に4バイトの0を返す。
+ *  - seek の失敗時はセッションを切る。
  */
 static bool session_process_seek(fp_session *session) {
     int fd = session->fd;
