@@ -394,16 +394,20 @@ err:
 }
 
 /**
- * command: write\0\0\0 の8バイト固定
- * datalen: dataの長さ、4バイト
- * data: writeするデータ
+ * - 入力
+ *  - command: write\0\0\0 の8バイト固定
+ *  - datalen: dataの長さ、4バイト
+ *  - data: writeするデータ
+ * - 出力
+ *  - 常に4バイトの0を返す。
+ *  - write の失敗時はセッションを切る。
  */
 static bool session_process_write(fp_session *session) {
     char *buf = session->buf;
     int bufsize = session->bufsize;
     int fd = session->fd;
     ss_logger *logger = session->logger;
-    unsigned int len, idx;
+    unsigned int len, idx, response = 0;
 
     if (!readn(session, &len, sizeof(unsigned int))) {
         ss_err(logger, "failed to read write data length\n");
@@ -422,6 +426,10 @@ static bool session_process_write(fp_session *session) {
             ss_err(logger, "failed to write data: %s\n", strerror(errno));
             goto err;
         }
+    }
+    if (!writen(session, &response, sizeof(response))) {
+        ss_err(logger, "failed to write write response\n", strerror(errno));
+        goto err;
     }
 
     return true;
