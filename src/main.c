@@ -5,6 +5,7 @@
 
 int main(int argc, char **argv) {
     int port;
+    fp_ctx ctx;
 
     if (argc < 2) {
         fprintf(stderr, "usage:   fp port\n");
@@ -23,7 +24,12 @@ int main(int argc, char **argv) {
         fprintf(stderr, "port number must be less than 65536\n");
         goto err;
     }
-    if (!fp_run(port)) {
+
+    if (!fp_init(&ctx)) {
+        fprintf(stderr, "failed to initialize\n");
+        goto err;
+    }
+    if (!fp_run(&ctx, port)) {
         fprintf(stderr, "failed to run server\n");
         goto err;
     }

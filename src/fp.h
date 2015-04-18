@@ -2,7 +2,13 @@
 #define __FP_SRC_FP_H__
 
 #include <stdbool.h>
+#include <ss.h>
 
-bool fp_run(int port);
+typedef struct __fp_ctx {
+    ss_ctx ss;
+} fp_ctx;
+
+bool fp_init(fp_ctx *ctx);
+bool fp_run(fp_ctx *ctx, int port);
 
 #endif

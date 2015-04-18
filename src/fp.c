@@ -597,22 +597,20 @@ out:
     }
 }
 
-bool fp_run(int port) {
-    ss_ctx ctx;
+bool fp_init(fp_ctx *ctx) {
+    return ss_init(&ctx->ss, cbk, NULL);
+}
+
+bool fp_run(fp_ctx *ctx, int port) {
     int listen_sd = -1;
 
-    if (!ss_init(&ctx, cbk, NULL)) {
-        fprintf(stderr, "failed to init\n");
-        goto err;
-    }
-
-    listen_sd = ss_listen(&ctx, port);
+    listen_sd = ss_listen(&ctx->ss, port);
     if (listen_sd < 0) {
         fprintf(stderr, "failed to listen %d\n", port);
         goto err;
     }
 
-    if (!ss_run(&ctx, listen_sd)) {
+    if (!ss_run(&ctx->ss, listen_sd)) {
         fprintf(stderr, "failed to start server\n");
         goto err;
     }
