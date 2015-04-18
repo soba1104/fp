@@ -598,22 +598,37 @@ out:
 }
 
 bool fp_run(int port) {
-    ss_ctx *ctx = ss_new(cbk, NULL);
+    ss_ctx *ctx = NULL;
+    int listen_sd = -1;
+
+    ctx = ss_new(cbk, NULL);
     if (!ctx) {
         fprintf(stderr, "failed to allocate memory\n");
         goto err;
     }
-    if (!ss_run(ctx, port)) {
+
+    listen_sd = ss_listen(ctx, port);
+    if (listen_sd < 0) {
+        fprintf(stderr, "failed to listen %d\n", port);
+        goto err;
+    }
+
+    if (!ss_run(ctx, listen_sd)) {
         fprintf(stderr, "failed to start server\n");
         goto err;
     }
+
     ss_free(ctx);
+    close(listen_sd);
 
     return true;
 
 err:
     if (ctx) {
         ss_free(ctx);
+    }
+    if (listen_sd >= 0) {
+        close(listen_sd);
     }
 
     return false;
