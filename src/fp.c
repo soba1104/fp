@@ -1,4 +1,5 @@
 #include "fp.h"
+#include <ss.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -596,40 +597,24 @@ out:
     }
 }
 
-int main(int argc, char **argv) {
-    int port;
-    ss_ctx *ctx = NULL;
-
-    if (argc < 2) {
-        fprintf(stderr, "usage:   fp port\n");
-        fprintf(stderr, "example: fp 1234\n");
+bool fp_run(int port) {
+    ss_ctx *ctx = ss_new(cbk, NULL);
+    if (!ctx) {
+        fprintf(stderr, "failed to allocate memory\n");
         goto err;
     }
-
-    port = atoi(argv[1]);
-    if (port <= 0) {
-        fprintf(stderr, "invalid port number %d\n", port);
-        fprintf(stderr, "port number must be greater than 0\n");
-        goto err;
-    }
-    if (port >= 65536) {
-        fprintf(stderr, "invalid port number %d\n", port);
-        fprintf(stderr, "port number must be less than 65536\n");
-        goto err;
-    }
-
-    ctx = ss_new(cbk, NULL);
     if (!ss_run(ctx, port)) {
         fprintf(stderr, "failed to start server\n");
         goto err;
     }
     ss_free(ctx);
 
-    return 0;
+    return true;
 
 err:
     if (ctx) {
         ss_free(ctx);
     }
-    return -1;
+
+    return false;
 }

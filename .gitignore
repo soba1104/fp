@@ -5,3 +5,5 @@ CMakeFiles
 Makefile
 install_manifest.txt
 /tmp
+/lib
+/include
