@@ -2,9 +2,11 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 int main(int argc, char **argv) {
     int port;
+    int listen_sd = -1;
     fp_ctx ctx;
 
     if (argc < 2) {
@@ -29,13 +31,26 @@ int main(int argc, char **argv) {
         fprintf(stderr, "failed to initialize\n");
         goto err;
     }
-    if (!fp_run(&ctx, port)) {
+
+    listen_sd = fp_listen(&ctx, port);
+    if (listen_sd < 0) {
+        fprintf(stderr, "failed to listen %d\n", port);
+        goto err;
+    }
+
+    if (!fp_run(&ctx, listen_sd)) {
         fprintf(stderr, "failed to run server\n");
         goto err;
     }
 
+    close(listen_sd);
+
     return 0;
 
 err:
+    if (listen_sd >= 0) {
+        close(listen_sd);
+    }
+
     return -1;
 }

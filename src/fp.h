@@ -9,6 +9,7 @@ typedef struct __fp_ctx {
 } fp_ctx;
 
 bool fp_init(fp_ctx *ctx);
-bool fp_run(fp_ctx *ctx, int port);
+int fp_listen(fp_ctx *ctx, int port);
+bool fp_run(fp_ctx *ctx, int listen_sd);
 
 #endif
