@@ -166,7 +166,7 @@ static bool session_process_open(fp_session *session) {
 
     fd = op_open(path, flags_sys);
     if (!fd) {
-        ss_err(logger, "failed to open %s\n", path);
+        ss_err(logger, "failed to open %s: %s\n", path, strerror(errno));
         goto err;
     }
     if (!writen(session, &response, sizeof(response))) {
@@ -225,7 +225,7 @@ static bool session_process_create(fp_session *session) {
 
     fd = op_create(path, S_IRUSR | S_IWUSR | S_IRGRP);
     if (!fd) {
-        ss_err(logger, "failed to create %s\n", path);
+        ss_err(logger, "failed to create %s: %s\n", path, strerror(errno));
         goto err;
     }
     if (!writen(session, &response, sizeof(response))) {
