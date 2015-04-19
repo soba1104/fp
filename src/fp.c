@@ -62,49 +62,15 @@ static inline uint64_t ntohll(uint64_t n) {
 }
 #endif
 
-static void mkpdir(const char *path, mode_t mode) {
-    char *dir = NULL;
-    int len = strlen(path);
-    int i;
-
-    dir = malloc(len + 1);
-    if (!dir) {
-        goto out;
-    }
-    strcpy(dir, path);
-
-    for (i = len - 1; i >= 0; i--) {
-        if (dir[i] == '/') {
-            dir[i + 1] = '\0';
-            break;
-        }
-    }
-    if (i < 0) {
-        goto out;
-    }
-
-    for (i = 0; dir[i] != '\0'; i++) {
-        if (dir[i] == '/') {
-            dir[i] = '\0';
-            mkdir(dir, mode);
-            dir[i] = '/';
-        }
-    }
-
-out:
-    if (dir) {
-        free(dir);
-    }
-}
-
 typedef struct __fp_session {
     int sd;
-    int fd;
+    void *fd;
     char *path;
     char *buf;
     int bufsize;
     int bufidx;
     ss_logger *logger;
+    fp_ops *ops;
 } fp_session;
 
 static bool readn(fp_session *session, void *buf, int n) {
@@ -160,7 +126,9 @@ static bool session_process_open(fp_session *session) {
     char *path = NULL;
     ss_logger *logger = session->logger;
     unsigned int len, flags_fp;
-    int fd = -1, flags_sys = 0, response = 0;
+    int flags_sys = 0, response = 0;
+    fp_open op_open = session->ops->open;
+    void *fd = NULL;
 
     if (!readn(session, &len, sizeof(unsigned int))) {
         ss_err(logger, "failed to read open path length\n");
@@ -196,9 +164,9 @@ static bool session_process_open(fp_session *session) {
     memcpy(path, buf, len);
     path[len] = '\0';
 
-    fd = open(path, flags_sys);
-    if (fd < 0) {
-        ss_err(logger, "failed to open %s: %s\n", path, strerror(errno));
+    fd = op_open(path, flags_sys);
+    if (!fd) {
+        ss_err(logger, "failed to open %s\n", path);
         goto err;
     }
     if (!writen(session, &response, sizeof(response))) {
@@ -207,20 +175,13 @@ static bool session_process_open(fp_session *session) {
     }
 
     assert(!session->path);
-    assert(session->fd < 0);
+    assert(session->fd == NULL);
     session->fd = fd;
     session->path = path;
 
     return true;
 
 err:
-    if (path) {
-        free(path);
-    }
-    if (fd >= 0) {
-        close(fd);
-    }
-
     return false;
 }
 
@@ -238,7 +199,9 @@ static bool session_process_create(fp_session *session) {
     char *path = NULL;
     ss_logger *logger = session->logger;
     unsigned int len;
-    int fd = -1, response = 0;
+    int response = 0;
+    fp_create op_create = session->ops->create;
+    void *fd = NULL;
 
     if (!readn(session, &len, sizeof(unsigned int))) {
         ss_err(logger, "failed to read create path length\n");
@@ -260,11 +223,9 @@ static bool session_process_create(fp_session *session) {
     memcpy(path, buf, len);
     path[len] = '\0';
 
-    // TODO 外から mode を指定できるようにする。
-    mkpdir(path, S_IRWXU | S_IRGRP | S_IXGRP);
-    fd = open(path, O_WRONLY | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR | S_IRGRP);
-    if (fd < 0) {
-        ss_err(logger, "failed to create %s: %s\n", path, strerror(errno));
+    fd = op_create(path, S_IRUSR | S_IWUSR | S_IRGRP);
+    if (!fd) {
+        ss_err(logger, "failed to create %s\n", path);
         goto err;
     }
     if (!writen(session, &response, sizeof(response))) {
@@ -273,20 +234,13 @@ static bool session_process_create(fp_session *session) {
     }
 
     assert(!session->path);
-    assert(session->fd < 0);
+    assert(session->fd == NULL);
     session->fd = fd;
     session->path = path;
 
     return true;
 
 err:
-    if (path) {
-        free(path);
-    }
-    if (fd >= 0) {
-        close(fd);
-    }
-
     return false;
 }
 
@@ -303,6 +257,7 @@ static bool session_process_delete(fp_session *session) {
     char *buf = session->buf;
     ss_logger *logger = session->logger;
     unsigned int len, response = 0;
+    fp_delete op_delete = session->ops->delete;
 
     if (!readn(session, &len, sizeof(unsigned int))) {
         ss_err(logger, "failed to read delete path length\n");
@@ -317,7 +272,7 @@ static bool session_process_delete(fp_session *session) {
     }
     buf[len] = '\0';
 
-    if (unlink(buf) < 0) {
+    if (op_delete(buf) < 0) {
         ss_err(logger, "failed to delete %s: %s\n", buf, strerror(errno));
         goto err;
     }
@@ -348,9 +303,10 @@ err:
 static bool session_process_read(fp_session *session) {
     char *buf = session->buf;
     int bufsize = session->bufsize;
-    int fd = session->fd;
     ss_logger *logger = session->logger;
     unsigned int len, idx, fin = 0;
+    fp_read op_read = session->ops->read;
+    void *fd = session->fd;
 
     if (!readn(session, &len, sizeof(unsigned int))) {
         ss_err(logger, "failed to read read length\n");
@@ -362,7 +318,7 @@ static bool session_process_read(fp_session *session) {
     idx = 0;
     while (idx < len) {
         int s = min(len - idx, bufsize);
-        int reth = read(fd, buf, s);
+        int reth = op_read(fd, buf, s);
         int retn = htonl(reth);
 
         if (reth < 0) {
@@ -406,9 +362,10 @@ err:
 static bool session_process_write(fp_session *session) {
     char *buf = session->buf;
     int bufsize = session->bufsize;
-    int fd = session->fd;
     ss_logger *logger = session->logger;
     unsigned int len, idx, response = 0;
+    fp_write op_write = session->ops->write;
+    void *fd = session->fd;
 
     if (!readn(session, &len, sizeof(unsigned int))) {
         ss_err(logger, "failed to read write data length\n");
@@ -423,7 +380,7 @@ static bool session_process_write(fp_session *session) {
             ss_err(logger, "failed to read write data\n");
             goto err;
         }
-        if (write(fd, buf, s) < 0) {
+        if (op_write(fd, buf, s) < 0) {
             ss_err(logger, "failed to write data: %s\n", strerror(errno));
             goto err;
         }
@@ -449,11 +406,12 @@ err:
  *  - seek の失敗時はセッションを切る。
  */
 static bool session_process_seek(fp_session *session) {
-    int fd = session->fd;
     ss_logger *logger = session->logger;
     int whence_fp, whence_sys, response = 0;
     int64_t offset_fp;
     off_t offset_sys;
+    fp_seek op_seek = session->ops->seek;
+    void *fd = session->fd;
 
     if (!readn(session, &whence_fp, sizeof(whence_fp))) {
         ss_err(logger, "failed to read seek whence\n");
@@ -481,7 +439,7 @@ static bool session_process_seek(fp_session *session) {
     }
     offset_fp = ntohll(offset_fp);
     offset_sys = (off_t)offset_fp;
-    if (lseek(fd, offset_sys, whence_sys) < 0) {
+    if (op_seek(fd, offset_sys, whence_sys) < 0) {
         ss_err(logger,
                "failed to seek: whence = %d, offset = %lld, error = %s\n",
                whence_fp,
@@ -538,11 +496,14 @@ err:
 
 static void cbk(ss_logger *logger, int sd, void *arg) {
     fp_session session;
+    fp_ctx *ctx = arg;
+    fp_ops *ops = &ctx->ops;
     uint64_t cmd = 0;
 
+    session.ops = ops;
     session.logger = logger;
     session.sd = sd;
-    session.fd = -1;
+    session.fd = NULL;
     session.path = NULL;
     session.bufsize = FP_DEFAULT_BUFSIZE;
     session.bufidx = 0;
@@ -556,7 +517,7 @@ static void cbk(ss_logger *logger, int sd, void *arg) {
         goto out;
     }
 
-    if (session.fd < 0) {
+    if (session.fd == NULL) {
         // delete などの場合は特に続けて行える操作がないので接続を切る。
         goto out;
     }
@@ -592,13 +553,14 @@ out:
     if (session.path) {
         free(session.path);
     }
-    if (session.fd >= 0) {
-        close(session.fd);
+    if (session.fd) {
+        ops->close(session.fd);
     }
 }
 
-bool fp_init(fp_ctx *ctx) {
-    return ss_init(&ctx->ss, cbk, NULL);
+bool fp_init(fp_ctx *ctx, fp_ops *ops) {
+    ctx->ops = *ops;
+    return ss_init(&ctx->ss, cbk, ctx);
 }
 
 int fp_listen(fp_ctx *ctx, int port) {
