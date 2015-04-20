@@ -158,7 +158,7 @@ static bool session_process_open(fp_session *session) {
         flags_sys |= O_WRONLY;
     } else {
         errmsg = ERROR_INVALID_OPEN_FLAGS;
-        errlen = sizeof(ERROR_INVALID_OPEN_FLAGS);
+        errlen = sizeof(ERROR_INVALID_OPEN_FLAGS) - 1;
         errhdr = htonl(-errlen);
         goto err;
     }
@@ -181,7 +181,7 @@ static bool session_process_open(fp_session *session) {
     if (!fd) {
         ss_err(logger, "failed to open %s: %s\n", path, strerror(errno));
         errmsg = ERROR_OPEN_FAILURE;
-        errlen = sizeof(ERROR_OPEN_FAILURE);
+        errlen = sizeof(ERROR_OPEN_FAILURE) - 1;
         errhdr = htonl(-errlen);
         goto err;
     }
@@ -249,7 +249,7 @@ static bool session_process_create(fp_session *session) {
     if (!fd) {
         ss_err(logger, "failed to create %s: %s\n", path, strerror(errno));
         errmsg = ERROR_CREATE_FAILURE;
-        errlen = sizeof(ERROR_CREATE_FAILURE);
+        errlen = sizeof(ERROR_CREATE_FAILURE) - 1;
         errhdr = htonl(-errlen);
         goto err;
     }
@@ -306,7 +306,7 @@ static bool session_process_delete(fp_session *session) {
     if (op_delete(buf) < 0) {
         ss_err(logger, "failed to delete %s: %s\n", buf, strerror(errno));
         errmsg = ERROR_DELETE_FAILURE;
-        errlen = sizeof(ERROR_DELETE_FAILURE);
+        errlen = sizeof(ERROR_DELETE_FAILURE) - 1;
         errhdr = htonl(-errlen);
         goto err;
     }
@@ -364,7 +364,7 @@ static bool session_process_read(fp_session *session) {
         if (reth < 0) {
             ss_err(logger, "failed to read data: %s\n", strerror(errno));
             errmsg = ERROR_READ_FAILURE;
-            errlen = sizeof(ERROR_READ_FAILURE);
+            errlen = sizeof(ERROR_READ_FAILURE) - 1;
             errhdr = htonl(-errlen);
             goto err;
         }
@@ -433,7 +433,7 @@ static bool session_process_write(fp_session *session) {
         if (op_write(fd, buf, s) < 0) {
             ss_err(logger, "failed to write data: %s\n", strerror(errno));
             errmsg = ERROR_WRITE_FAILURE;
-            errlen = sizeof(ERROR_WRITE_FAILURE);
+            errlen = sizeof(ERROR_WRITE_FAILURE) - 1;
             errhdr = htonl(-errlen);
             goto err;
         }
@@ -491,7 +491,7 @@ static bool session_process_seek(fp_session *session) {
         default:
             ss_err(logger, "invalid whence %d\n", whence_fp);
             errmsg = ERROR_INVALID_SEEK_WHENCE;
-            errlen = sizeof(ERROR_INVALID_SEEK_WHENCE);
+            errlen = sizeof(ERROR_INVALID_SEEK_WHENCE) - 1;
             errhdr = htonl(-errlen);
             break;
     }
@@ -509,7 +509,7 @@ static bool session_process_seek(fp_session *session) {
                offset_fp,
                strerror(errno));
         errmsg = ERROR_SEEK_FAILURE;
-        errlen = sizeof(ERROR_SEEK_FAILURE);
+        errlen = sizeof(ERROR_SEEK_FAILURE) - 1;
         errhdr = htonl(-errlen);
         goto err;
     }
