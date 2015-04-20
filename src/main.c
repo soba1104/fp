@@ -40,7 +40,7 @@ out:
     }
 }
 
-void *op_create(const char *path, mode_t mode) {
+void *op_create(const char *path, mode_t mode, void *arg) {
     long fd;
     // TODO 外から mode を指定できるようにする。
     mkpdir(path, S_IRWXU | S_IRGRP | S_IXGRP);
@@ -48,28 +48,28 @@ void *op_create(const char *path, mode_t mode) {
     return fd >= 0 ? (void*)fd : NULL;
 }
 
-void *op_open(const char *path, int flags) {
+void *op_open(const char *path, int flags, void *arg) {
     long fd = open(path, flags);
     return fd >= 0 ? (void*)fd : NULL;
 }
 
-int op_read(void *fd, void *buf, size_t size) {
+int op_read(void *fd, void *buf, size_t size, void *arg) {
     return read((long)fd, buf, size);
 }
 
-int op_write(void *fd, void *buf, size_t size) {
+int op_write(void *fd, void *buf, size_t size, void *arg) {
     return write((long)fd, buf, size);
 }
 
-int op_seek(void *fd, off_t offset, int whence) {
+int op_seek(void *fd, off_t offset, int whence, void *arg) {
     return lseek((long)fd, offset, whence);
 }
 
-int op_close(void *fd) {
+int op_close(void *fd, void *arg) {
     return close((long)fd);
 }
 
-int op_delete(const char *path) {
+int op_delete(const char *path, void *arg) {
     return unlink(path);
 }
 
@@ -105,7 +105,7 @@ int main(int argc, char **argv) {
         goto err;
     }
 
-    if (!fp_init(&ctx, &ops)) {
+    if (!fp_init(&ctx, &ops, NULL)) {
         fprintf(stderr, "failed to initialize\n");
         goto err;
     }

@@ -80,6 +80,7 @@ typedef struct __fp_session {
     int bufidx;
     ss_logger *logger;
     fp_ops *ops;
+    void *ops_arg;
 } fp_session;
 
 static bool readn(fp_session *session, void *buf, int n) {
@@ -137,6 +138,7 @@ static bool session_process_open(fp_session *session) {
     unsigned int len, flags_fp;
     int flags_sys = 0, response = 0;
     fp_open op_open = session->ops->open;
+    void *ops_arg = session->ops_arg;
     void *fd = NULL;
     const char *errmsg = NULL;
     int errlen, errhdr;
@@ -177,7 +179,7 @@ static bool session_process_open(fp_session *session) {
     memcpy(path, buf, len);
     path[len] = '\0';
 
-    fd = op_open(path, flags_sys);
+    fd = op_open(path, flags_sys, ops_arg);
     if (!fd) {
         ss_err(logger, "failed to open %s: %s\n", path, strerror(errno));
         errmsg = ERROR_OPEN_FAILURE;
@@ -221,6 +223,7 @@ static bool session_process_create(fp_session *session) {
     unsigned int len;
     int response = 0;
     fp_create op_create = session->ops->create;
+    void *ops_arg = session->ops_arg;
     void *fd = NULL;
     const char *errmsg = NULL;
     int errlen, errhdr;
@@ -245,7 +248,7 @@ static bool session_process_create(fp_session *session) {
     memcpy(path, buf, len);
     path[len] = '\0';
 
-    fd = op_create(path, S_IRUSR | S_IWUSR | S_IRGRP);
+    fd = op_create(path, S_IRUSR | S_IWUSR | S_IRGRP, ops_arg);
     if (!fd) {
         ss_err(logger, "failed to create %s: %s\n", path, strerror(errno));
         errmsg = ERROR_CREATE_FAILURE;
@@ -287,6 +290,7 @@ static bool session_process_delete(fp_session *session) {
     ss_logger *logger = session->logger;
     unsigned int len, response = 0;
     fp_delete op_delete = session->ops->delete;
+    void *ops_arg = session->ops_arg;
     const char *errmsg = NULL;
     int errlen, errhdr;
 
@@ -303,7 +307,7 @@ static bool session_process_delete(fp_session *session) {
     }
     buf[len] = '\0';
 
-    if (op_delete(buf) < 0) {
+    if (op_delete(buf, ops_arg) < 0) {
         ss_err(logger, "failed to delete %s: %s\n", buf, strerror(errno));
         errmsg = ERROR_DELETE_FAILURE;
         errlen = sizeof(ERROR_DELETE_FAILURE) - 1;
@@ -344,6 +348,7 @@ static bool session_process_read(fp_session *session) {
     ss_logger *logger = session->logger;
     unsigned int len, idx, fin = 0;
     fp_read op_read = session->ops->read;
+    void *ops_arg = session->ops_arg;
     void *fd = session->fd;
     const char *errmsg = NULL;
     int errlen, errhdr;
@@ -358,7 +363,7 @@ static bool session_process_read(fp_session *session) {
     idx = 0;
     while (idx < len) {
         int s = min(len - idx, bufsize);
-        int reth = op_read(fd, buf, s);
+        int reth = op_read(fd, buf, s, ops_arg);
         int retn = htonl(reth);
 
         if (reth < 0) {
@@ -413,6 +418,7 @@ static bool session_process_write(fp_session *session) {
     ss_logger *logger = session->logger;
     unsigned int len, idx, response = 0;
     fp_write op_write = session->ops->write;
+    void *ops_arg = session->ops_arg;
     void *fd = session->fd;
     const char *errmsg = NULL;
     int errlen, errhdr;
@@ -430,7 +436,7 @@ static bool session_process_write(fp_session *session) {
             ss_err(logger, "failed to read write data\n");
             goto err;
         }
-        if (op_write(fd, buf, s) < 0) {
+        if (op_write(fd, buf, s, ops_arg) < 0) {
             ss_err(logger, "failed to write data: %s\n", strerror(errno));
             errmsg = ERROR_WRITE_FAILURE;
             errlen = sizeof(ERROR_WRITE_FAILURE) - 1;
@@ -469,6 +475,7 @@ static bool session_process_seek(fp_session *session) {
     int64_t offset_fp;
     off_t offset_sys;
     fp_seek op_seek = session->ops->seek;
+    void *ops_arg = session->ops_arg;
     void *fd = session->fd;
     const char *errmsg = NULL;
     int errlen, errhdr;
@@ -502,7 +509,7 @@ static bool session_process_seek(fp_session *session) {
     }
     offset_fp = ntohll(offset_fp);
     offset_sys = (off_t)offset_fp;
-    if (op_seek(fd, offset_sys, whence_sys) < 0) {
+    if (op_seek(fd, offset_sys, whence_sys, ops_arg) < 0) {
         ss_err(logger,
                "failed to seek: whence = %d, offset = %lld, error = %s\n",
                whence_fp,
@@ -569,9 +576,11 @@ static void cbk(ss_logger *logger, int sd, void *arg) {
     fp_session session;
     fp_ctx *ctx = arg;
     fp_ops *ops = &ctx->ops;
+    void *ops_arg = ctx->ops_arg;
     uint64_t cmd = 0;
 
     session.ops = ops;
+    session.ops_arg = ops_arg;
     session.logger = logger;
     session.sd = sd;
     session.fd = NULL;
@@ -625,12 +634,13 @@ out:
         free(session.path);
     }
     if (session.fd) {
-        ops->close(session.fd);
+        ops->close(session.fd, ops_arg);
     }
 }
 
-bool fp_init(fp_ctx *ctx, fp_ops *ops) {
+bool fp_init(fp_ctx *ctx, fp_ops *ops, void *ops_arg) {
     ctx->ops = *ops;
+    ctx->ops_arg = ops_arg;
     return ss_init(&ctx->ss, cbk, ctx);
 }
 
