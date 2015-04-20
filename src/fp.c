@@ -30,6 +30,15 @@
 #define FP_CMD_CLOSE FP_CMD("close\0\0\0")
 #define FP_CMD_DELETE FP_CMD("delete\0\0")
 
+#define ERROR_OPEN_FAILURE "open_failure"
+#define ERROR_INVALID_OPEN_FLAGS "invalid_open_flags"
+#define ERROR_CREATE_FAILURE "create_failure"
+#define ERROR_DELETE_FAILURE "delete_failure"
+#define ERROR_READ_FAILURE "read_failure"
+#define ERROR_WRITE_FAILURE "write_failure"
+#define ERROR_SEEK_FAILURE "seek_failure"
+#define ERROR_INVALID_SEEK_WHENCE "invalid_seek_whence"
+
 #define OPEN_FLAG_RDONLY (0x01 << 0)
 #define OPEN_FLAG_WRONLY (0x01 << 1)
 
@@ -87,7 +96,7 @@ static bool readn(fp_session *session, void *buf, int n) {
     }
 }
 
-static bool writen(fp_session *session, void *buf, int n) {
+static bool writen(fp_session *session, const void *buf, int n) {
     int sd = session->sd;
     int ret = write(sd, buf, n);
     ss_logger *logger = session->logger;
@@ -129,6 +138,8 @@ static bool session_process_open(fp_session *session) {
     int flags_sys = 0, response = 0;
     fp_open op_open = session->ops->open;
     void *fd = NULL;
+    const char *errmsg = NULL;
+    int errlen, errhdr;
 
     if (!readn(session, &len, sizeof(unsigned int))) {
         ss_err(logger, "failed to read open path length\n");
@@ -146,7 +157,9 @@ static bool session_process_open(fp_session *session) {
     } else if (flags_fp & OPEN_FLAG_WRONLY) {
         flags_sys |= O_WRONLY;
     } else {
-        ss_err(logger, "invalid open flags %x\n", flags_fp);
+        errmsg = ERROR_INVALID_OPEN_FLAGS;
+        errlen = sizeof(ERROR_INVALID_OPEN_FLAGS);
+        errhdr = htonl(-errlen);
         goto err;
     }
 
@@ -167,6 +180,9 @@ static bool session_process_open(fp_session *session) {
     fd = op_open(path, flags_sys);
     if (!fd) {
         ss_err(logger, "failed to open %s: %s\n", path, strerror(errno));
+        errmsg = ERROR_OPEN_FAILURE;
+        errlen = sizeof(ERROR_OPEN_FAILURE);
+        errhdr = htonl(-errlen);
         goto err;
     }
     if (!writen(session, &response, sizeof(response))) {
@@ -182,6 +198,10 @@ static bool session_process_open(fp_session *session) {
     return true;
 
 err:
+    if (errmsg) {
+        writen(session, &errhdr, sizeof(errhdr));
+        writen(session, errmsg, errlen);
+    }
     return false;
 }
 
@@ -202,6 +222,8 @@ static bool session_process_create(fp_session *session) {
     int response = 0;
     fp_create op_create = session->ops->create;
     void *fd = NULL;
+    const char *errmsg = NULL;
+    int errlen, errhdr;
 
     if (!readn(session, &len, sizeof(unsigned int))) {
         ss_err(logger, "failed to read create path length\n");
@@ -226,6 +248,9 @@ static bool session_process_create(fp_session *session) {
     fd = op_create(path, S_IRUSR | S_IWUSR | S_IRGRP);
     if (!fd) {
         ss_err(logger, "failed to create %s: %s\n", path, strerror(errno));
+        errmsg = ERROR_CREATE_FAILURE;
+        errlen = sizeof(ERROR_CREATE_FAILURE);
+        errhdr = htonl(-errlen);
         goto err;
     }
     if (!writen(session, &response, sizeof(response))) {
@@ -241,6 +266,10 @@ static bool session_process_create(fp_session *session) {
     return true;
 
 err:
+    if (errmsg) {
+        writen(session, &errhdr, sizeof(errhdr));
+        writen(session, errmsg, errlen);
+    }
     return false;
 }
 
@@ -258,6 +287,8 @@ static bool session_process_delete(fp_session *session) {
     ss_logger *logger = session->logger;
     unsigned int len, response = 0;
     fp_delete op_delete = session->ops->delete;
+    const char *errmsg = NULL;
+    int errlen, errhdr;
 
     if (!readn(session, &len, sizeof(unsigned int))) {
         ss_err(logger, "failed to read delete path length\n");
@@ -274,6 +305,9 @@ static bool session_process_delete(fp_session *session) {
 
     if (op_delete(buf) < 0) {
         ss_err(logger, "failed to delete %s: %s\n", buf, strerror(errno));
+        errmsg = ERROR_DELETE_FAILURE;
+        errlen = sizeof(ERROR_DELETE_FAILURE);
+        errhdr = htonl(-errlen);
         goto err;
     }
     if (!writen(session, &response, sizeof(response))) {
@@ -284,6 +318,10 @@ static bool session_process_delete(fp_session *session) {
     return true;
 
 err:
+    if (errmsg) {
+        writen(session, &errhdr, sizeof(errhdr));
+        writen(session, errmsg, errlen);
+    }
 
     return false;
 }
@@ -307,6 +345,8 @@ static bool session_process_read(fp_session *session) {
     unsigned int len, idx, fin = 0;
     fp_read op_read = session->ops->read;
     void *fd = session->fd;
+    const char *errmsg = NULL;
+    int errlen, errhdr;
 
     if (!readn(session, &len, sizeof(unsigned int))) {
         ss_err(logger, "failed to read read length\n");
@@ -323,6 +363,9 @@ static bool session_process_read(fp_session *session) {
 
         if (reth < 0) {
             ss_err(logger, "failed to read data: %s\n", strerror(errno));
+            errmsg = ERROR_READ_FAILURE;
+            errlen = sizeof(ERROR_READ_FAILURE);
+            errhdr = htonl(-errlen);
             goto err;
         }
         if (reth == 0) { // EOF
@@ -347,6 +390,11 @@ static bool session_process_read(fp_session *session) {
     return true;
 
 err:
+    if (errmsg) {
+        writen(session, &errhdr, sizeof(errhdr));
+        writen(session, errmsg, errlen);
+    }
+
     return false;
 }
 
@@ -366,6 +414,8 @@ static bool session_process_write(fp_session *session) {
     unsigned int len, idx, response = 0;
     fp_write op_write = session->ops->write;
     void *fd = session->fd;
+    const char *errmsg = NULL;
+    int errlen, errhdr;
 
     if (!readn(session, &len, sizeof(unsigned int))) {
         ss_err(logger, "failed to read write data length\n");
@@ -382,6 +432,9 @@ static bool session_process_write(fp_session *session) {
         }
         if (op_write(fd, buf, s) < 0) {
             ss_err(logger, "failed to write data: %s\n", strerror(errno));
+            errmsg = ERROR_WRITE_FAILURE;
+            errlen = sizeof(ERROR_WRITE_FAILURE);
+            errhdr = htonl(-errlen);
             goto err;
         }
     }
@@ -393,6 +446,11 @@ static bool session_process_write(fp_session *session) {
     return true;
 
 err:
+    if (errmsg) {
+        writen(session, &errhdr, sizeof(errhdr));
+        writen(session, errmsg, errlen);
+    }
+
     return false;
 }
 
@@ -412,6 +470,8 @@ static bool session_process_seek(fp_session *session) {
     off_t offset_sys;
     fp_seek op_seek = session->ops->seek;
     void *fd = session->fd;
+    const char *errmsg = NULL;
+    int errlen, errhdr;
 
     if (!readn(session, &whence_fp, sizeof(whence_fp))) {
         ss_err(logger, "failed to read seek whence\n");
@@ -429,7 +489,10 @@ static bool session_process_seek(fp_session *session) {
             whence_sys = SEEK_END;
             break;
         default:
-            ss_err(logger, "unknown whence %d\n", whence_fp);
+            ss_err(logger, "invalid whence %d\n", whence_fp);
+            errmsg = ERROR_INVALID_SEEK_WHENCE;
+            errlen = sizeof(ERROR_INVALID_SEEK_WHENCE);
+            errhdr = htonl(-errlen);
             break;
     }
 
@@ -445,6 +508,9 @@ static bool session_process_seek(fp_session *session) {
                whence_fp,
                offset_fp,
                strerror(errno));
+        errmsg = ERROR_SEEK_FAILURE;
+        errlen = sizeof(ERROR_SEEK_FAILURE);
+        errhdr = htonl(-errlen);
         goto err;
     }
     if (!writen(session, &response, sizeof(response))) {
@@ -455,6 +521,11 @@ static bool session_process_seek(fp_session *session) {
     return true;
 
 err:
+    if (errmsg) {
+        writen(session, &errhdr, sizeof(errhdr));
+        writen(session, errmsg, errlen);
+    }
+
     return false;
 }
 
