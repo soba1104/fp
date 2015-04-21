@@ -50,7 +50,6 @@
 
 #define min(a, b) ((a) < (b) ? (a) : (b))
 
-#ifndef ntohll
 static inline bool is_little_endian(void) {
     static const uint8_t d[4] = {0x01, 0x02, 0x03, 0x04};
     uint32_t h = *((uint32_t*)(d));
@@ -58,6 +57,7 @@ static inline bool is_little_endian(void) {
     return h == le;
 }
 
+#ifndef ntohll
 static inline uint64_t ntohll(uint64_t n) {
     if (is_little_endian()) {
         uint8_t *nv = (uint8_t*)(&n);
@@ -69,6 +69,22 @@ static inline uint64_t ntohll(uint64_t n) {
         return *((uint64_t*)(hv));
     } else {
         return n;
+    }
+}
+#endif
+
+#ifndef htonll
+static inline uint64_t htonll(uint64_t h) {
+    if (is_little_endian()) {
+        uint8_t *hv = (uint8_t*)(&h);
+        uint8_t nv[8];
+        int i;
+        for (i = 0; i < 8; i++) {
+            nv[8 - i - 1] = hv[i];
+        }
+        return *((uint64_t*)(nv));
+    } else {
+        return h;
     }
 }
 #endif
