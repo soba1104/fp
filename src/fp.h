@@ -13,6 +13,7 @@ typedef void* (*fp_open)(const char *path, int flags, void *arg);
 typedef int (*fp_read)(void *fd, void *buf, size_t size, void *arg);
 typedef int (*fp_write)(void *fd, void *buf, size_t size, void *arg);
 typedef int (*fp_seek)(void *fd, off_t offset, int whence, void *arg);
+typedef int (*fp_size)(void *fd, void *arg);
 typedef int (*fp_delete)(const char *path, void *arg);
 typedef int (*fp_close)(void *fd, void *arg);
 
@@ -22,6 +23,7 @@ typedef struct __fp_ops {
     fp_read read;
     fp_write write;
     fp_seek seek;
+    fp_size size;
     fp_close close;
     fp_delete delete;
 } fp_ops;

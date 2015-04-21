@@ -29,6 +29,7 @@
 #define FP_CMD_SEEK FP_CMD("seek\0\0\0\0")
 #define FP_CMD_CLOSE FP_CMD("close\0\0\0")
 #define FP_CMD_DELETE FP_CMD("delete\0\0")
+#define FP_CMD_SIZE FP_CMD("size\0\0\0\0")
 
 #define ERROR_OPEN_FAILURE "open_failure"
 #define ERROR_INVALID_OPEN_FLAGS "invalid_open_flags"
@@ -38,6 +39,7 @@
 #define ERROR_WRITE_FAILURE "write_failure"
 #define ERROR_SEEK_FAILURE "seek_failure"
 #define ERROR_INVALID_SEEK_WHENCE "invalid_seek_whence"
+#define ERROR_SIZE_FAILURE "size_failure"
 
 #define OPEN_FLAG_RDONLY (0x01 << 0)
 #define OPEN_FLAG_WRONLY (0x01 << 1)
@@ -536,6 +538,50 @@ err:
     return false;
 }
 
+/**
+ * - 入力
+ *  - command: size\0\0\0\0 の8バイト固定
+ * - 出力
+ *  - 8バイトでファイルサイズを返す
+ */
+static bool session_process_size(fp_session *session) {
+    ss_logger *logger = session->logger;
+    fp_size op_size = session->ops->size;
+    void *ops_arg = session->ops_arg;
+    void *fd = session->fd;
+    const char *errmsg = NULL;
+    int errlen, errhdr;
+    int64_t hsize, nsize;
+
+    hsize = op_size(fd, ops_arg);
+    if (hsize < 0) {
+        ss_err(logger,
+                "failed to get file size of %s: %s\n",
+                session->path,
+                strerror(errno));
+        errmsg = ERROR_SIZE_FAILURE;
+        errlen = sizeof(ERROR_SIZE_FAILURE) - 1;
+        errhdr = htonl(-errlen);
+        goto err;
+    }
+
+    nsize = htonll(hsize);
+    if (!writen(session, &nsize, sizeof(nsize))) {
+        ss_err(logger, "failed to write size response\n", strerror(errno));
+        goto err;
+    }
+
+    return true;
+
+err:
+    if (errmsg) {
+        writen(session, &errhdr, sizeof(errhdr));
+        writen(session, errmsg, errlen);
+    }
+
+    return false;
+}
+
 static bool session_start(fp_session *session) {
     uint64_t cmd = 0;
     ss_logger *logger = session->logger;
@@ -616,6 +662,11 @@ static void cbk(ss_logger *logger, int sd, void *arg) {
         } else if (cmd == FP_CMD_SEEK) {
             if (!session_process_seek(&session)) {
                 ss_err(logger, "failed to process seek command\n");
+                goto out;
+            }
+        } else if (cmd == FP_CMD_SIZE) {
+            if (!session_process_size(&session)) {
+                ss_err(logger, "failed to process size command\n");
                 goto out;
             }
         } else if (cmd == FP_CMD_CLOSE) {
