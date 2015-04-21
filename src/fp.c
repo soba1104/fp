@@ -79,7 +79,7 @@ static inline uint64_t ntohll(uint64_t n) {
 
 #ifndef htonll
 static inline uint64_t htonll(uint64_t h) {
-    return reverse_if_little_endian(n);
+    return reverse_if_little_endian(h);
 }
 #endif
 
