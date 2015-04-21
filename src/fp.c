@@ -57,35 +57,29 @@ static inline bool is_little_endian(void) {
     return h == le;
 }
 
-#ifndef ntohll
-static inline uint64_t ntohll(uint64_t n) {
+static inline uint64_t reverse_if_little_endian(uint64_t n0) {
     if (is_little_endian()) {
-        uint8_t *nv = (uint8_t*)(&n);
-        uint8_t hv[8];
+        uint8_t *n0v = (uint8_t*)(&n0);
+        uint8_t n1v[8];
         int i;
         for (i = 0; i < 8; i++) {
-            hv[8 - i - 1] = nv[i];
+            n1v[8 - i - 1] = n0v[i];
         }
-        return *((uint64_t*)(hv));
+        return *((uint64_t*)(n1v));
     } else {
-        return n;
+        return n0;
     }
+}
+
+#ifndef ntohll
+static inline uint64_t ntohll(uint64_t n) {
+    return reverse_if_little_endian(n);
 }
 #endif
 
 #ifndef htonll
 static inline uint64_t htonll(uint64_t h) {
-    if (is_little_endian()) {
-        uint8_t *hv = (uint8_t*)(&h);
-        uint8_t nv[8];
-        int i;
-        for (i = 0; i < 8; i++) {
-            nv[8 - i - 1] = hv[i];
-        }
-        return *((uint64_t*)(nv));
-    } else {
-        return h;
-    }
+    return reverse_if_little_endian(n);
 }
 #endif
 
