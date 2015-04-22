@@ -560,7 +560,7 @@ static bool session_process_size(fp_session *session) {
     void *fd = session->fd;
     const char *errmsg = NULL;
     int64_t errlen, errhdr;
-    int64_t hsize, nsize;
+    int64_t rsphdr = htonll(sizeof(int64_t)), hsize, nsize;
 
     hsize = op_size(fd, ops_arg);
     if (hsize < 0) {
@@ -575,6 +575,10 @@ static bool session_process_size(fp_session *session) {
     }
 
     nsize = htonll(hsize);
+    if (!writen(session, &rsphdr, sizeof(rsphdr))) {
+        ss_err(logger, "failed to write response header\n", strerror(errno));
+        goto err;
+    }
     if (!writen(session, &nsize, sizeof(nsize))) {
         ss_err(logger, "failed to write size response\n", strerror(errno));
         goto err;
