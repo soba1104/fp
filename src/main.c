@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 static void mkpdir(const char *path, mode_t mode) {
     char *dir = NULL;
@@ -69,6 +71,16 @@ int op_close(void *fd, void *arg) {
     return close((long)fd);
 }
 
+int64_t op_size(void *fd, void *arg) {
+    struct stat stat;
+
+    if (fstat((long)fd, &stat) < 0) {
+        return -1;
+    }
+
+    return stat.st_size;
+}
+
 int op_delete(const char *path, void *arg) {
     return unlink(path);
 }
@@ -85,6 +97,7 @@ int main(int argc, char **argv) {
     ops.write = op_write;
     ops.seek = op_seek;
     ops.close = op_close;
+    ops.size = op_size;
     ops.delete = op_delete;
 
     if (argc < 2) {

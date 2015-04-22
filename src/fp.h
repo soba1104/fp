@@ -13,7 +13,7 @@ typedef void* (*fp_open)(const char *path, int flags, void *arg);
 typedef int (*fp_read)(void *fd, void *buf, size_t size, void *arg);
 typedef int (*fp_write)(void *fd, void *buf, size_t size, void *arg);
 typedef int (*fp_seek)(void *fd, off_t offset, int whence, void *arg);
-typedef int (*fp_size)(void *fd, void *arg);
+typedef int64_t (*fp_size)(void *fd, void *arg);
 typedef int (*fp_delete)(const char *path, void *arg);
 typedef int (*fp_close)(void *fd, void *arg);
 
