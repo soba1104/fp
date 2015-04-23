@@ -142,7 +142,7 @@ static uint64_t readcmd(fp_session *session) {
  *  - flags: openのモードなどのflag群、4バイト
  *  - path: path文字列
  * - 出力
- *  - 常に4バイトの0を返す。
+ *  - 常に8バイトの0を返す。
  *  - open の失敗時はセッションを切る。
  */
 static bool session_process_open(fp_session *session) {
@@ -227,7 +227,7 @@ err:
  *  - pathlen: pathの長さ、4バイト
  *  - path: path文字列
  * - 出力
- *  - 常に4バイトの0を返す。
+ *  - 常に8バイトの0を返す。
  *  - create の失敗時はセッションを切る。
  */
 static bool session_process_create(fp_session *session) {
@@ -295,7 +295,7 @@ err:
  *  - pathlen: pathの長さ、4バイト
  *  - path: path文字列
  * - 出力
- *  - 常に4バイトの0を返す。
+ *  - 常に8バイトの0を返す。
  *  - delete の失敗時はセッションを切る。
  */
 static bool session_process_delete(fp_session *session) {
@@ -350,7 +350,7 @@ err:
  *  - len: 読み込む長さ、4バイト
  * - 出力
  *  - 以下のチャンクを繰り返し返す。len = 0 の場合はチャンク列の末端を示す。
- *   - チャンク長の4バイト整数
+ *   - チャンク長の8バイト整数
  *   - チャンク長分のデータ
  *  - 1つめのチャンク長が0の場合はEOFであることを示す。
  *  - read に失敗した場合はセッションを切る。
@@ -422,7 +422,7 @@ err:
  *  - datalen: dataの長さ、4バイト
  *  - data: writeするデータ
  * - 出力
- *  - 常に4バイトの0を返す。
+ *  - 常に8バイトの0を返す。
  *  - write の失敗時はセッションを切る。
  */
 static bool session_process_write(fp_session *session) {
@@ -479,7 +479,7 @@ err:
  *  - type: seek のタイプ、4バイト
  *   - offset: シーク先のオフセット、8バイト
  * - 出力
- *  - 常に4バイトの0を返す。
+ *  - 常に8バイトの0を返す。
  *  - seek の失敗時はセッションを切る。
  */
 static bool session_process_seek(fp_session *session) {
