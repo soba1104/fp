@@ -18,7 +18,7 @@
 // 読み込みか書き込みどっちか専用で open
 
 #define FP_NUM_CMDS 1
-#define FP_DEFAULT_BUFSIZE 200
+#define FP_DEFAULT_BUFSIZE (1024 * 16)
 
 #define FP_CMD_NAME_LEN sizeof(uint64_t)
 #define FP_CMD(name) (*((uint64_t*)(name)))
@@ -30,6 +30,7 @@
 #define FP_CMD_CLOSE FP_CMD("close\0\0\0")
 #define FP_CMD_DELETE FP_CMD("delete\0\0")
 #define FP_CMD_SIZE FP_CMD("size\0\0\0\0")
+#define FP_CMD_BUFSIZE FP_CMD("bufsize\0")
 
 #define ERROR_OPEN_FAILURE "open_failure"
 #define ERROR_INVALID_OPEN_FLAGS "invalid_open_flags"
@@ -40,6 +41,7 @@
 #define ERROR_SEEK_FAILURE "seek_failure"
 #define ERROR_INVALID_SEEK_WHENCE "invalid_seek_whence"
 #define ERROR_SIZE_FAILURE "size_failure"
+#define ERROR_BUFSIZE_FAILURE "bufsize_failure"
 
 #define OPEN_FLAG_RDONLY (0x01 << 0)
 #define OPEN_FLAG_WRONLY (0x01 << 1)
@@ -595,6 +597,54 @@ err:
     return false;
 }
 
+/**
+ * - 入力
+ *  - command: bufsize\0 の8バイト固定
+ *  - datalen: 新たに設定するバッファサイズ、8バイト
+ * - 出力
+ *  - 常に8バイトの0を返す。
+ *  - 失敗時はセッションを切る。
+ */
+static bool session_process_bufsize(fp_session *session) {
+    ss_logger *logger = session->logger;
+    int64_t bufsize, rsphdr = 0;
+    int64_t errlen, errhdr;
+    const char *errmsg = NULL;
+
+    if (!readn(session, &bufsize, sizeof(bufsize))) {
+        ss_err(logger, "failed to read seek whence\n");
+        goto err;
+    }
+    bufsize = ntohll(bufsize);
+
+    free(session->buf);
+    session->bufsize = bufsize;
+    session->bufidx = 0;
+    session->buf = malloc(bufsize);
+    if (!session->buf) {
+        ss_err(logger, "failed to reallocate client buffer\n");
+        errmsg = ERROR_BUFSIZE_FAILURE;
+        errlen = sizeof(ERROR_BUFSIZE_FAILURE) - 1;
+        errhdr = htonll(-errlen);
+        goto err;
+    }
+
+    if (!writen(session, &rsphdr, sizeof(rsphdr))) {
+        ss_err(logger, "failed to write response header\n", strerror(errno));
+        goto err;
+    }
+
+    return true;
+
+err:
+    if (errmsg) {
+        writen(session, &errhdr, sizeof(errhdr));
+        writen(session, errmsg, errlen);
+    }
+
+    return false;
+}
+
 static bool session_start(fp_session *session) {
     uint64_t cmd = 0;
     ss_logger *logger = session->logger;
@@ -680,6 +730,11 @@ static void cbk(ss_logger *logger, int sd, void *arg) {
         } else if (cmd == FP_CMD_SIZE) {
             if (!session_process_size(&session)) {
                 ss_err(logger, "failed to process size command\n");
+                goto out;
+            }
+        } else if (cmd == FP_CMD_BUFSIZE) {
+            if (!session_process_bufsize(&session)) {
+                ss_err(logger, "failed to process bufsize command\n");
                 goto out;
             }
         } else if (cmd == FP_CMD_CLOSE) {
