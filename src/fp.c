@@ -347,7 +347,7 @@ err:
 /**
  * - 入力
  *  - command: read\0\0\0\0 の8バイト固定
- *  - len: 読み込む長さ、4バイト
+ *  - len: 読み込む長さ、8バイト
  * - 出力
  *  - 以下のチャンクを繰り返し返す。len = 0 の場合はチャンク列の末端を示す。
  *   - チャンク長の8バイト整数
@@ -359,18 +359,18 @@ static bool session_process_read(fp_session *session) {
     char *buf = session->buf;
     int bufsize = session->bufsize;
     ss_logger *logger = session->logger;
-    unsigned int len, idx; // TODO 64bit に変更する。
+    uint64_t len, idx;
     fp_read op_read = session->ops->read;
     void *ops_arg = session->ops_arg;
     void *fd = session->fd;
     const char *errmsg = NULL;
     int64_t errlen, errhdr, fin = 0;
 
-    if (!readn(session, &len, sizeof(unsigned int))) {
+    if (!readn(session, &len, sizeof(len))) {
         ss_err(logger, "failed to read read length\n");
         goto err;
     }
-    len = ntohl(len);
+    len = ntohll(len);
 
     assert(buf);
     idx = 0;
