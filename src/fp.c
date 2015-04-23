@@ -419,7 +419,7 @@ err:
 /**
  * - 入力
  *  - command: write\0\0\0 の8バイト固定
- *  - datalen: dataの長さ、4バイト
+ *  - datalen: dataの長さ、8バイト
  *  - data: writeするデータ
  * - 出力
  *  - 常に8バイトの0を返す。
@@ -429,18 +429,18 @@ static bool session_process_write(fp_session *session) {
     char *buf = session->buf;
     int bufsize = session->bufsize;
     ss_logger *logger = session->logger;
-    unsigned int len, idx;
+    uint64_t len, idx;
     fp_write op_write = session->ops->write;
     void *ops_arg = session->ops_arg;
     void *fd = session->fd;
     const char *errmsg = NULL;
     int64_t errlen, errhdr, rsphdr = 0;
 
-    if (!readn(session, &len, sizeof(unsigned int))) {
+    if (!readn(session, &len, sizeof(uint64_t))) {
         ss_err(logger, "failed to read write data length\n");
         goto err;
     }
-    len = ntohl(len);
+    len = ntohll(len);
 
     assert(buf);
     for (idx = 0; idx < len; idx += bufsize) {
