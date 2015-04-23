@@ -155,7 +155,7 @@ static bool session_process_open(fp_session *session) {
     void *ops_arg = session->ops_arg;
     void *fd = NULL;
     const char *errmsg = NULL;
-    int64_t errlen, errhdr, response = 0;
+    int64_t errlen, errhdr, rsphdr = 0;
 
     if (!readn(session, &len, sizeof(unsigned int))) {
         ss_err(logger, "failed to read open path length\n");
@@ -201,8 +201,8 @@ static bool session_process_open(fp_session *session) {
         errhdr = htonll(-errlen);
         goto err;
     }
-    if (!writen(session, &response, sizeof(response))) {
-        ss_err(logger, "failed to write open response\n", strerror(errno));
+    if (!writen(session, &rsphdr, sizeof(rsphdr))) {
+        ss_err(logger, "failed to write response header\n", strerror(errno));
         goto err;
     }
 
@@ -239,7 +239,7 @@ static bool session_process_create(fp_session *session) {
     void *ops_arg = session->ops_arg;
     void *fd = NULL;
     const char *errmsg = NULL;
-    int64_t errlen, errhdr, response = 0;
+    int64_t errlen, errhdr, rsphdr = 0;
 
     if (!readn(session, &len, sizeof(unsigned int))) {
         ss_err(logger, "failed to read create path length\n");
@@ -269,8 +269,8 @@ static bool session_process_create(fp_session *session) {
         errhdr = htonll(-errlen);
         goto err;
     }
-    if (!writen(session, &response, sizeof(response))) {
-        ss_err(logger, "failed to write create response\n", strerror(errno));
+    if (!writen(session, &rsphdr, sizeof(rsphdr))) {
+        ss_err(logger, "failed to write response header\n", strerror(errno));
         goto err;
     }
 
@@ -305,7 +305,7 @@ static bool session_process_delete(fp_session *session) {
     fp_delete op_delete = session->ops->delete;
     void *ops_arg = session->ops_arg;
     const char *errmsg = NULL;
-    int64_t errlen, errhdr, response = 0;
+    int64_t errlen, errhdr, rsphdr = 0;
 
     if (!readn(session, &len, sizeof(unsigned int))) {
         ss_err(logger, "failed to read delete path length\n");
@@ -327,8 +327,8 @@ static bool session_process_delete(fp_session *session) {
         errhdr = htonll(-errlen);
         goto err;
     }
-    if (!writen(session, &response, sizeof(response))) {
-        ss_err(logger, "failed to write delete response\n", strerror(errno));
+    if (!writen(session, &rsphdr, sizeof(rsphdr))) {
+        ss_err(logger, "failed to write response header\n", strerror(errno));
         goto err;
     }
 
@@ -391,17 +391,17 @@ static bool session_process_read(fp_session *session) {
         }
         // TODO writev でまとめて書き込む
         if (!writen(session, &retn, sizeof(retn))) {
-            ss_err(logger, "failed to response chunk size\n", strerror(errno));
+            ss_err(logger, "failed to write response header\n", strerror(errno));
             goto err;
         }
         if (!writen(session, buf, reth)) {
-            ss_err(logger, "failed to response read chunk\n", strerror(errno));
+            ss_err(logger, "failed to write response data\n", strerror(errno));
             goto err;
         }
         idx += reth;
     }
     if (!writen(session, &fin, sizeof(fin))) {
-        ss_err(logger, "failed to response read end marker\n", strerror(errno));
+        ss_err(logger, "failed to write response header\n", strerror(errno));
         goto err;
     }
 
@@ -434,7 +434,7 @@ static bool session_process_write(fp_session *session) {
     void *ops_arg = session->ops_arg;
     void *fd = session->fd;
     const char *errmsg = NULL;
-    int64_t errlen, errhdr, response = 0;
+    int64_t errlen, errhdr, rsphdr = 0;
 
     if (!readn(session, &len, sizeof(unsigned int))) {
         ss_err(logger, "failed to read write data length\n");
@@ -457,8 +457,8 @@ static bool session_process_write(fp_session *session) {
             goto err;
         }
     }
-    if (!writen(session, &response, sizeof(response))) {
-        ss_err(logger, "failed to write write response\n", strerror(errno));
+    if (!writen(session, &rsphdr, sizeof(rsphdr))) {
+        ss_err(logger, "failed to write response header\n", strerror(errno));
         goto err;
     }
 
@@ -491,7 +491,7 @@ static bool session_process_seek(fp_session *session) {
     void *ops_arg = session->ops_arg;
     void *fd = session->fd;
     const char *errmsg = NULL;
-    int64_t errlen, errhdr, response = 0;
+    int64_t errlen, errhdr, rsphdr = 0;
 
     if (!readn(session, &whence_fp, sizeof(whence_fp))) {
         ss_err(logger, "failed to read seek whence\n");
@@ -533,8 +533,8 @@ static bool session_process_seek(fp_session *session) {
         errhdr = htonll(-errlen);
         goto err;
     }
-    if (!writen(session, &response, sizeof(response))) {
-        ss_err(logger, "failed to write seek response\n", strerror(errno));
+    if (!writen(session, &rsphdr, sizeof(rsphdr))) {
+        ss_err(logger, "failed to write response header\n", strerror(errno));
         goto err;
     }
 
@@ -582,7 +582,7 @@ static bool session_process_size(fp_session *session) {
         goto err;
     }
     if (!writen(session, &nsize, sizeof(nsize))) {
-        ss_err(logger, "failed to write size response\n", strerror(errno));
+        ss_err(logger, "failed to write response data\n", strerror(errno));
         goto err;
     }
 
