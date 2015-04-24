@@ -138,8 +138,8 @@ static uint64_t readcmd(fp_session *session) {
 /**
  * - 入力
  *  - command: open\0\0\0\0 の8バイト固定
- *  - pathlen: pathの長さ、4バイト
- *  - flags: openのモードなどのflag群、4バイト
+ *  - pathlen: pathの長さ、8バイト
+ *  - flags: openのモードなどのflag群、8バイト
  *  - path: path文字列
  * - 出力
  *  - 常に8バイトの0を返す。
@@ -149,7 +149,7 @@ static bool session_process_open(fp_session *session) {
     char *buf = session->buf;
     char *path = NULL;
     ss_logger *logger = session->logger;
-    unsigned int len, flags_fp;
+    uint64_t len, flags_fp;
     int flags_sys = 0;
     fp_open op_open = session->ops->open;
     void *ops_arg = session->ops_arg;
@@ -157,17 +157,17 @@ static bool session_process_open(fp_session *session) {
     const char *errmsg = NULL;
     int64_t errlen, errhdr, rsphdr = 0;
 
-    if (!readn(session, &len, sizeof(unsigned int))) {
+    if (!readn(session, &len, sizeof(len))) {
         ss_err(logger, "failed to read open path length\n");
         goto err;
     }
-    len = ntohl(len);
+    len = ntohll(len);
 
-    if (!readn(session, &flags_fp, sizeof(unsigned int))) {
+    if (!readn(session, &flags_fp, sizeof(flags_fp))) {
         ss_err(logger, "failed to read open flags\n");
         goto err;
     }
-    flags_fp = ntohl(flags_fp);
+    flags_fp = ntohll(flags_fp);
     if (flags_fp & OPEN_FLAG_RDONLY) {
         flags_sys |= O_RDONLY;
     } else if (flags_fp & OPEN_FLAG_WRONLY) {
