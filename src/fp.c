@@ -138,8 +138,8 @@ static uint64_t readcmd(fp_session *session) {
 /**
  * - 入力
  *  - command: open\0\0\0\0 の8バイト固定
- *  - pathlen: pathの長さ、8バイト
  *  - flags: openのモードなどのflag群、8バイト
+ *  - pathlen: pathの長さ、8バイト
  *  - path: path文字列
  * - 出力
  *  - 常に8バイトの0を返す。
@@ -157,12 +157,6 @@ static bool session_process_open(fp_session *session) {
     const char *errmsg = NULL;
     int64_t errlen, errhdr, rsphdr = 0;
 
-    if (!readn(session, &len, sizeof(len))) {
-        ss_err(logger, "failed to read open path length\n");
-        goto err;
-    }
-    len = ntohll(len);
-
     if (!readn(session, &flags_fp, sizeof(flags_fp))) {
         ss_err(logger, "failed to read open flags\n");
         goto err;
@@ -179,6 +173,11 @@ static bool session_process_open(fp_session *session) {
         goto err;
     }
 
+    if (!readn(session, &len, sizeof(len))) {
+        ss_err(logger, "failed to read open path length\n");
+        goto err;
+    }
+    len = ntohll(len);
     assert(buf);
     if (!readn(session, buf, len)) {
         ss_err(logger, "failed to read open path\n");
