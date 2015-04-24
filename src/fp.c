@@ -224,7 +224,7 @@ err:
 /**
  * - 入力
  *  - command: create\0\0 の8バイト固定
- *  - pathlen: pathの長さ、4バイト
+ *  - pathlen: pathの長さ、8バイト
  *  - path: path文字列
  * - 出力
  *  - 常に8バイトの0を返す。
@@ -234,18 +234,18 @@ static bool session_process_create(fp_session *session) {
     char *buf = session->buf;
     char *path = NULL;
     ss_logger *logger = session->logger;
-    unsigned int len;
+    uint64_t len;
     fp_create op_create = session->ops->create;
     void *ops_arg = session->ops_arg;
     void *fd = NULL;
     const char *errmsg = NULL;
     int64_t errlen, errhdr, rsphdr = 0;
 
-    if (!readn(session, &len, sizeof(unsigned int))) {
+    if (!readn(session, &len, sizeof(len))) {
         ss_err(logger, "failed to read create path length\n");
         goto err;
     }
-    len = ntohl(len);
+    len = ntohll(len);
 
     assert(buf);
     if (!readn(session, buf, len)) {
@@ -292,7 +292,7 @@ err:
 /**
  * - 入力
  *  - command: delete\0\0 の8バイト固定
- *  - pathlen: pathの長さ、4バイト
+ *  - pathlen: pathの長さ、8バイト
  *  - path: path文字列
  * - 出力
  *  - 常に8バイトの0を返す。
@@ -301,17 +301,17 @@ err:
 static bool session_process_delete(fp_session *session) {
     char *buf = session->buf;
     ss_logger *logger = session->logger;
-    unsigned int len;
+    uint64_t len;
     fp_delete op_delete = session->ops->delete;
     void *ops_arg = session->ops_arg;
     const char *errmsg = NULL;
     int64_t errlen, errhdr, rsphdr = 0;
 
-    if (!readn(session, &len, sizeof(unsigned int))) {
+    if (!readn(session, &len, sizeof(uint64_t))) {
         ss_err(logger, "failed to read delete path length\n");
         goto err;
     }
-    len = ntohl(len);
+    len = ntohll(len);
 
     assert(buf);
     if (!readn(session, buf, len)) {
@@ -476,7 +476,7 @@ err:
 /**
  * - 入力
  *  - command: seek\0\0\0\0 の8バイト固定
- *  - type: seek のタイプ、4バイト
+ *  - type: seek のタイプ、8バイト
  *   - offset: シーク先のオフセット、8バイト
  * - 出力
  *  - 常に8バイトの0を返す。
@@ -484,7 +484,8 @@ err:
  */
 static bool session_process_seek(fp_session *session) {
     ss_logger *logger = session->logger;
-    int whence_fp, whence_sys;
+    int64_t whence_fp;
+    int whence_sys;
     int64_t offset_fp;
     off_t offset_sys;
     fp_seek op_seek = session->ops->seek;
@@ -497,7 +498,7 @@ static bool session_process_seek(fp_session *session) {
         ss_err(logger, "failed to read seek whence\n");
         goto err;
     }
-    whence_fp = ntohl(whence_fp);
+    whence_fp = ntohll(whence_fp);
     switch (whence_fp) {
         case FP_SEEK_WHENCE_SET:
             whence_sys = SEEK_SET;
