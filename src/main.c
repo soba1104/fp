@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/statvfs.h>
 
 static void mkpdir(const char *path, mode_t mode) {
     char *dir = NULL;
@@ -81,6 +82,16 @@ int64_t op_size(void *fd, void *arg) {
     return stat.st_size;
 }
 
+int64_t op_df(void *arg) {
+    struct statvfs stat;
+
+    if (statvfs("/", &stat) < 0) {
+        return -1;
+    }
+
+    return stat.f_frsize * stat.f_bavail;
+}
+
 int op_delete(const char *path, void *arg) {
     return unlink(path);
 }
@@ -98,6 +109,7 @@ int main(int argc, char **argv) {
     ops.seek = op_seek;
     ops.close = op_close;
     ops.size = op_size;
+    ops.df = op_df;
     ops.delete = op_delete;
 
     if (argc < 2) {

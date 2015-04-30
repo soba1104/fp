@@ -31,6 +31,7 @@
 #define FP_CMD_DELETE FP_CMD("delete\0\0")
 #define FP_CMD_SIZE FP_CMD("size\0\0\0\0")
 #define FP_CMD_BUFSIZE FP_CMD("bufsize\0")
+#define FP_CMD_DF FP_CMD("df\0\0\0\0\0\0")
 
 #define ERROR_OPEN_FAILURE "open_failure"
 #define ERROR_INVALID_OPEN_FLAGS "invalid_open_flags"
@@ -42,6 +43,7 @@
 #define ERROR_INVALID_SEEK_WHENCE "invalid_seek_whence"
 #define ERROR_SIZE_FAILURE "size_failure"
 #define ERROR_BUFSIZE_FAILURE "bufsize_failure"
+#define ERROR_DF_FAILURE "df_failure"
 
 #define OPEN_FLAG_RDONLY (0x01 << 0)
 #define OPEN_FLAG_WRONLY (0x01 << 1)
@@ -645,6 +647,50 @@ err:
     return false;
 }
 
+/**
+ * - 入力
+ *  - command: df\0\0\0\0\0\0 の8バイト固定
+ * - 出力
+ *  - 8バイトでdisk空き容量を返す
+ */
+static bool session_process_df(fp_session *session) {
+    ss_logger *logger = session->logger;
+    fp_df op_df = session->ops->df;
+    void *ops_arg = session->ops_arg;
+    const char *errmsg = NULL;
+    int64_t errlen, errhdr;
+    int64_t rsphdr = htonll(sizeof(int64_t)), hdf, ndf;
+
+    hdf = op_df(ops_arg);
+    if (hdf < 0) {
+        ss_err(logger, "failed to get disk free: %s\n", strerror(errno));
+        errmsg = ERROR_DF_FAILURE;
+        errlen = sizeof(ERROR_DF_FAILURE) - 1;
+        errhdr = htonll(-errlen);
+        goto err;
+    }
+
+    ndf = htonll(hdf);
+    if (!writen(session, &rsphdr, sizeof(rsphdr))) {
+        ss_err(logger, "failed to write response header\n", strerror(errno));
+        goto err;
+    }
+    if (!writen(session, &ndf, sizeof(ndf))) {
+        ss_err(logger, "failed to write response data\n", strerror(errno));
+        goto err;
+    }
+
+    return true;
+
+err:
+    if (errmsg) {
+        writen(session, &errhdr, sizeof(errhdr));
+        writen(session, errmsg, errlen);
+    }
+
+    return false;
+}
+
 static bool session_start(fp_session *session) {
     uint64_t cmd = 0;
     ss_logger *logger = session->logger;
@@ -668,6 +714,11 @@ static bool session_start(fp_session *session) {
     } else if (cmd == FP_CMD_DELETE) {
         if (!session_process_delete(session)) {
             ss_err(logger, "delete failed\n");
+            goto err;
+        }
+    } else if (cmd == FP_CMD_DF) {
+        if (!session_process_df(session)) {
+            ss_err(logger, "failed to process df command\n");
             goto err;
         }
     } else {
