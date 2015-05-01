@@ -164,6 +164,12 @@ static bool session_process_open(fp_session *session) {
         ss_err(logger, "failed to read open flags\n");
         goto err;
     }
+    if (flags_fp[0] == '\0') {
+        errmsg = ERROR_INVALID_OPEN_FLAGS;
+        errlen = sizeof(ERROR_INVALID_OPEN_FLAGS) - 1;
+        errhdr = htonll(-errlen);
+        goto err;
+    }
     for (i = 0; flags_fp[i] != '\0' && i < sizeof(flags_fp); i++) {
         char flag = flags_fp[i];
         switch (flag) {
