@@ -45,8 +45,8 @@
 #define ERROR_BUFSIZE_FAILURE "bufsize_failure"
 #define ERROR_DF_FAILURE "df_failure"
 
-#define OPEN_FLAG_RDONLY (0x01 << 0)
-#define OPEN_FLAG_WRONLY (0x01 << 1)
+#define OPEN_FLAG_READ 'r'
+#define OPEN_FLAG_WRITE 'w'
 
 #define FP_SEEK_WHENCE_SET 1
 #define FP_SEEK_WHENCE_CUR 2
@@ -150,29 +150,49 @@ static uint64_t readcmd(fp_session *session) {
 static bool session_process_open(fp_session *session) {
     char *buf = session->buf;
     char *path = NULL;
+    char flags_fp[sizeof(uint64_t)];
     ss_logger *logger = session->logger;
-    uint64_t len, flags_fp;
-    int flags_sys = 0;
+    uint64_t len;
+    int flags_sys = 0, i;
     fp_open op_open = session->ops->open;
     void *ops_arg = session->ops_arg;
     void *fd = NULL;
     const char *errmsg = NULL;
     int64_t errlen, errhdr, rsphdr = 0;
 
-    if (!readn(session, &flags_fp, sizeof(flags_fp))) {
+    if (!readn(session, flags_fp, sizeof(flags_fp))) {
         ss_err(logger, "failed to read open flags\n");
         goto err;
     }
-    flags_fp = ntohll(flags_fp);
-    if (flags_fp & OPEN_FLAG_RDONLY) {
-        flags_sys |= O_RDONLY;
-    } else if (flags_fp & OPEN_FLAG_WRONLY) {
-        flags_sys |= O_WRONLY;
-    } else {
-        errmsg = ERROR_INVALID_OPEN_FLAGS;
-        errlen = sizeof(ERROR_INVALID_OPEN_FLAGS) - 1;
-        errhdr = htonll(-errlen);
-        goto err;
+    for (i = 0; flags_fp[i] != '\0' && i < sizeof(flags_fp); i++) {
+        char flag = flags_fp[i];
+        switch (flag) {
+            case OPEN_FLAG_READ:
+                if (flags_sys & O_RDWR) {
+                    // nothing to do
+                } else if (flags_sys & O_WRONLY) {
+                    flags_sys &= ~O_WRONLY;
+                    flags_sys |= O_RDWR;
+                } else {
+                    flags_sys |= O_RDONLY;
+                }
+                break;
+            case OPEN_FLAG_WRITE:
+                if (flags_sys & O_RDWR) {
+                    // nothing to do
+                } else if (flags_sys & O_RDONLY) {
+                    flags_sys &= ~O_RDONLY;
+                    flags_sys |= O_RDWR;
+                } else {
+                    flags_sys |= O_WRONLY;
+                }
+                break;
+            default:
+                errmsg = ERROR_INVALID_OPEN_FLAGS;
+                errlen = sizeof(ERROR_INVALID_OPEN_FLAGS) - 1;
+                errhdr = htonll(-errlen);
+                goto err;
+        }
     }
 
     if (!readn(session, &len, sizeof(len))) {
