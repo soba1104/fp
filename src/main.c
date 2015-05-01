@@ -135,7 +135,7 @@ int main(int argc, char **argv) {
         goto err;
     }
 
-    listen_sd = fp_listen(&ctx, port);
+    listen_sd = fp_listen_tcp(&ctx, port);
     if (listen_sd < 0) {
         fprintf(stderr, "failed to listen %d\n", port);
         goto err;

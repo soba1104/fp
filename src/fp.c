@@ -814,8 +814,12 @@ bool fp_init(fp_ctx *ctx, fp_ops *ops, void *ops_arg) {
     return ss_init(&ctx->ss, cbk, ctx);
 }
 
-int fp_listen(fp_ctx *ctx, int port) {
+int fp_listen_tcp(fp_ctx *ctx, int port) {
     return ss_listen_tcp(&ctx->ss, port);
+}
+
+int fp_listen_uds(fp_ctx *ctx, const char *path) {
+    return ss_listen_uds(&ctx->ss, path);
 }
 
 bool fp_run(fp_ctx *ctx, int listen_sd) {
