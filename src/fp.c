@@ -633,31 +633,31 @@ err:
  * - 出力
  *  - 常に8バイトの0を返す。
  *  - 失敗時はセッションを切る。
+ *  TODO 現在値よりも小さい値に設定できないようにする。
  */
 static bool session_process_bufsize(fp_session *session) {
     ss_logger *logger = session->logger;
-    int64_t bufsize, rsphdr = 0;
+    int64_t newbufsize, rsphdr = 0;
     int64_t errlen, errhdr;
     const char *errmsg = NULL;
+    char *newbuf = NULL;
 
-    if (!readn(session, &bufsize, sizeof(bufsize))) {
+    if (!readn(session, &newbufsize, sizeof(newbufsize))) {
         ss_err(logger, "failed to read seek whence\n");
         goto err;
     }
-    bufsize = ntohll(bufsize);
+    newbufsize = ntohll(newbufsize);
 
-    free(session->buf);
-    session->bufsize = bufsize;
-    session->bufstart = 0;
-    session->bufend = 0;
-    session->buf = malloc(bufsize);
-    if (!session->buf) {
+    newbuf = realloc(session->buf, newbufsize);
+    if (!newbuf) {
         ss_err(logger, "failed to reallocate client buffer\n");
         errmsg = ERROR_BUFSIZE_FAILURE;
         errlen = sizeof(ERROR_BUFSIZE_FAILURE) - 1;
         errhdr = htonll(-errlen);
         goto err;
     }
+    session->buf = newbuf;
+    session->bufsize = newbufsize;
 
     if (!writen(session, &rsphdr, sizeof(rsphdr))) {
         ss_err(logger, "failed to write response header\n", strerror(errno));
