@@ -563,6 +563,8 @@ static bool session_process_seek(fp_session *session) {
         errhdr = htonll(-errlen);
         goto err;
     }
+    session->bufstart = 0;
+    session->bufend = 0;
     if (!writen(session, &rsphdr, sizeof(rsphdr))) {
         ss_err(logger, "failed to write response header\n", strerror(errno));
         goto err;
