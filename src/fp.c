@@ -42,6 +42,7 @@
 #define ERROR_SEEK_FAILURE "seek_failure"
 #define ERROR_INVALID_SEEK_WHENCE "invalid_seek_whence"
 #define ERROR_SIZE_FAILURE "size_failure"
+#define ERROR_BUFSIZE_TOO_SMALL "bufsize_too_small"
 #define ERROR_BUFSIZE_FAILURE "bufsize_failure"
 #define ERROR_DF_FAILURE "df_failure"
 
@@ -633,7 +634,6 @@ err:
  * - 出力
  *  - 常に8バイトの0を返す。
  *  - 失敗時はセッションを切る。
- *  TODO 現在値よりも小さい値に設定できないようにする。
  */
 static bool session_process_bufsize(fp_session *session) {
     ss_logger *logger = session->logger;
@@ -647,6 +647,13 @@ static bool session_process_bufsize(fp_session *session) {
         goto err;
     }
     newbufsize = ntohll(newbufsize);
+
+    if (newbufsize < session->bufsize) {
+        errmsg = ERROR_BUFSIZE_TOO_SMALL;
+        errlen = sizeof(ERROR_BUFSIZE_TOO_SMALL) - 1;
+        errhdr = htonll(-errlen);
+        goto err;
+    }
 
     newbuf = realloc(session->buf, newbufsize);
     if (!newbuf) {
