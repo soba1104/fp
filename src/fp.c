@@ -93,7 +93,8 @@ typedef struct __fp_session {
     char *path;
     char *buf;
     int bufsize;
-    int bufidx;
+    int bufstart;
+    int bufend;
     ss_logger *logger;
     fp_ops *ops;
     void *ops_arg;
@@ -647,7 +648,8 @@ static bool session_process_bufsize(fp_session *session) {
 
     free(session->buf);
     session->bufsize = bufsize;
-    session->bufidx = 0;
+    session->bufstart = 0;
+    session->bufend = 0;
     session->buf = malloc(bufsize);
     if (!session->buf) {
         ss_err(logger, "failed to reallocate client buffer\n");
@@ -772,7 +774,8 @@ static void cbk(ss_logger *logger, int sd, void *arg) {
     session.fd = NULL;
     session.path = NULL;
     session.bufsize = FP_DEFAULT_BUFSIZE;
-    session.bufidx = 0;
+    session.bufstart = 0;
+    session.bufend = 0;
     session.buf = malloc(FP_DEFAULT_BUFSIZE);
     if (!session.buf) {
         ss_err(logger, "failed to allocate client buffer\n");
