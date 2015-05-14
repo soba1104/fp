@@ -403,31 +403,48 @@ static bool session_process_read(fp_session *session) {
 
     assert(buf);
     idx = 0;
-    while (idx < len) {
-        int s = min(len - idx, bufsize);
-        int64_t reth = op_read(fd, buf, s, ops_arg);
-        int64_t retn = htonll(reth);
+    while (true) {
+        int64_t require = len - idx;
+        int64_t bufrest = session->bufend - session->bufstart;
+        int s;
 
-        if (reth < 0) {
+        if (bufrest > 0) {
+            int64_t reth = min(require, bufrest);
+            int64_t retn = htonll(reth);
+
+            // TODO writev でまとめて書き込む
+            if (!writen(session, &retn, sizeof(retn))) {
+                ss_err(logger, "failed to write response header\n", strerror(errno));
+                goto err;
+            }
+            if (!writen(session, buf + session->bufstart, reth)) {
+                ss_err(logger, "failed to write response data\n", strerror(errno));
+                goto err;
+            }
+            session->bufstart += reth;
+            idx += reth;
+        }
+
+        if (idx == len) {
+            break;
+        }
+        assert(session->bufstart == session->bufend);
+        session->bufstart = 0;
+        session->bufend = 0;
+
+        s = op_read(fd, buf, bufsize, ops_arg);
+        if (s < 0) {
             ss_err(logger, "failed to read data: %s\n", strerror(errno));
             errmsg = ERROR_READ_FAILURE;
             errlen = sizeof(ERROR_READ_FAILURE) - 1;
             errhdr = htonll(-errlen);
             goto err;
         }
-        if (reth == 0) { // EOF
+        session->bufend = s;
+
+        if (s == 0) { // EOF
             break;
         }
-        // TODO writev でまとめて書き込む
-        if (!writen(session, &retn, sizeof(retn))) {
-            ss_err(logger, "failed to write response header\n", strerror(errno));
-            goto err;
-        }
-        if (!writen(session, buf, reth)) {
-            ss_err(logger, "failed to write response data\n", strerror(errno));
-            goto err;
-        }
-        idx += reth;
     }
     if (!writen(session, &fin, sizeof(fin))) {
         ss_err(logger, "failed to write response header\n", strerror(errno));
