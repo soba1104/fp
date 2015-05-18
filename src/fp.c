@@ -569,6 +569,12 @@ static bool session_process_seek(fp_session *session) {
     }
     offset_fp = ntohll(offset_fp);
     offset_sys = (off_t)offset_fp;
+    if (whence_fp == FP_SEEK_WHENCE_CUR) {
+        int readahead = session->bufend - session->bufstart;
+        offset_fp -= readahead;
+        offset_sys -= readahead;
+    }
+
     if (op_seek(fd, offset_sys, whence_sys, ops_arg) < 0) {
         ss_err(logger,
                "failed to seek: whence = %d, offset = %lld, error = %s\n",
