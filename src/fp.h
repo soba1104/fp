@@ -37,7 +37,7 @@ typedef struct __fp_ctx {
 } fp_ctx;
 
 bool fp_init(fp_ctx *ctx, fp_ops *ops, void *ops_arg);
-int fp_listen_tcp(fp_ctx *ctx, int port);
+int fp_listen_tcp(fp_ctx *ctx, const char *ip, int port);
 int fp_listen_uds(fp_ctx *ctx, const char *path);
 bool fp_run(fp_ctx *ctx, int listen_sd);
 
