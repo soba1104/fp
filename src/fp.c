@@ -8,11 +8,18 @@
 
 #include <unistd.h>
 #include <sys/types.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 
 #include <assert.h>
 #include <errno.h>
+
+#ifndef SOL_TCP
+#define SOL_TCP IPPROTO_TCP
+#endif
 
 // 現状の仕様
 // 読み込みか書き込みどっちか専用で open
@@ -798,6 +805,7 @@ static void cbk(ss_logger *logger, int sd, void *arg) {
     fp_ops *ops = &ctx->ops;
     void *ops_arg = ctx->ops_arg;
     uint64_t cmd = 0;
+    int nodelay = 1;
 
     session.ops = ops;
     session.ops_arg = ops_arg;
@@ -811,6 +819,11 @@ static void cbk(ss_logger *logger, int sd, void *arg) {
     session.buf = malloc(FP_DEFAULT_BUFSIZE);
     if (!session.buf) {
         ss_err(logger, "failed to allocate client buffer\n");
+        goto out;
+    }
+
+    if (setsockopt(session.sd, SOL_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay)) < 0) {
+        ss_err(logger, "failed to set nodelay: %s\n", strerror(errno));
         goto out;
     }
 
