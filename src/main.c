@@ -64,7 +64,7 @@ int op_write(void *fd, void *buf, size_t size, void *arg) {
     return write((long)fd, buf, size);
 }
 
-int op_seek(void *fd, off_t offset, int whence, void *arg) {
+off_t op_seek(void *fd, off_t offset, int whence, void *arg) {
     return lseek((long)fd, offset, whence);
 }
 
