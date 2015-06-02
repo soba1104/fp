@@ -103,6 +103,7 @@ typedef struct __fp_session {
     int bufsize;
     int bufstart;
     int bufend;
+    off_t pos;
     ss_logger *logger;
     fp_ops *ops;
     void *ops_arg;
@@ -447,6 +448,7 @@ static bool session_process_read(fp_session *session) {
             errhdr = htonll(-errlen);
             goto err;
         }
+        session->pos += s;
         session->bufend = s;
 
         if (s == 0) { // EOF
@@ -498,17 +500,19 @@ static bool session_process_write(fp_session *session) {
     assert(buf);
     for (idx = 0; idx < len; idx += bufsize) {
         int s = min(len - idx, bufsize);
+        int r;
         if (!readn(session, buf, s)) {
             ss_err(logger, "failed to read write data\n");
             goto err;
         }
-        if (op_write(fd, buf, s, ops_arg) < 0) {
+        if ((r = op_write(fd, buf, s, ops_arg)) < 0) {
             ss_err(logger, "failed to write data: %s\n", strerror(errno));
             errmsg = ERROR_WRITE_FAILURE;
             errlen = sizeof(ERROR_WRITE_FAILURE) - 1;
             errhdr = htonll(-errlen);
             goto err;
         }
+        session->pos += r;
     }
     if (!writen(session, &rsphdr, sizeof(rsphdr))) {
         ss_err(logger, "failed to write response header\n", strerror(errno));
@@ -546,6 +550,7 @@ static bool session_process_seek(fp_session *session) {
     void *fd = session->fd;
     const char *errmsg = NULL;
     int64_t errlen, errhdr, rsphdr = 0;
+    off_t newpos;
 
     if (!readn(session, &whence_fp, sizeof(whence_fp))) {
         ss_err(logger, "failed to read seek whence\n");
@@ -586,7 +591,7 @@ static bool session_process_seek(fp_session *session) {
         }
     }
 
-    if (op_seek(fd, offset_sys, whence_sys, ops_arg) < 0) {
+    if ((newpos = op_seek(fd, offset_sys, whence_sys, ops_arg)) < 0) {
         ss_err(logger,
                "failed to seek: whence = %d, offset = %lld, error = %s\n",
                whence_fp,
@@ -599,6 +604,7 @@ static bool session_process_seek(fp_session *session) {
     }
     session->bufstart = 0;
     session->bufend = 0;
+    session->pos = newpos;
     if (!writen(session, &rsphdr, sizeof(rsphdr))) {
         ss_err(logger, "failed to write response header\n", strerror(errno));
         goto err;
@@ -818,6 +824,7 @@ static void cbk(ss_logger *logger, int sd, void *arg) {
     session.sd = sd;
     session.fd = NULL;
     session.path = NULL;
+    session.pos = 0;
     session.bufsize = FP_DEFAULT_BUFSIZE;
     session.bufstart = 0;
     session.bufend = 0;
