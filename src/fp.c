@@ -531,10 +531,22 @@ err:
 }
 
 /**
+ * seek 先がバッファ内に含まれているかどうかを判定する。
+ * - 引数
+ *  - bufend: session->bufend の値
+ *  - offset: ファイル先頭からの seek の目標位置と session->pos の相対距離
+ *            ファイル先頭からの seek の目標位置 - session->pos
+ *            session->pos に対して相対的にどれくらい seek すべきかという値
+ */
+bool is_seek_pos_in_buffer(off_t bufend, off_t offset) {
+    return (offset <= 0) && ((-offset) <= bufend);
+}
+
+/**
  * - 入力
  *  - command: seek\0\0\0\0 の8バイト固定
  *  - type: seek のタイプ、8バイト
- *   - offset: シーク先のオフセット、8バイト
+ *  - offset: シーク先のオフセット、8バイト
  * - 出力
  *  - 常に8バイトの0を返す。
  *  - seek の失敗時はセッションを切る。
@@ -585,8 +597,14 @@ static bool session_process_seek(fp_session *session) {
         int readahead = session->bufend - session->bufstart;
         offset_fp -= readahead;
         offset_sys -= readahead;
-        if ((offset_fp <= 0) && ((-offset_fp) <= session->bufend)) {
+        if (is_seek_pos_in_buffer(session->bufend, offset_sys)) {
             session->bufstart = session->bufend + offset_fp;
+            goto out;
+        }
+    } else if (whence_fp == FP_SEEK_WHENCE_SET) {
+        off_t relative_offset = offset_sys - session->pos;
+        if (is_seek_pos_in_buffer(session->bufend, relative_offset)) {
+            session->bufstart = session->bufend + relative_offset;
             goto out;
         }
     }
