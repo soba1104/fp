@@ -580,6 +580,10 @@ static bool session_process_seek(fp_session *session) {
         int readahead = session->bufend - session->bufstart;
         offset_fp -= readahead;
         offset_sys -= readahead;
+        if ((offset_fp <= 0) && ((-offset_fp) <= session->bufend)) {
+            session->bufstart = session->bufend + offset_fp;
+            goto out;
+        }
     }
 
     if (op_seek(fd, offset_sys, whence_sys, ops_arg) < 0) {
@@ -599,6 +603,7 @@ static bool session_process_seek(fp_session *session) {
         ss_err(logger, "failed to write response header\n", strerror(errno));
         goto err;
     }
+out:
 
     return true;
 
