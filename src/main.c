@@ -56,11 +56,11 @@ void *op_open(const char *path, int flags, void *arg) {
     return fd >= 0 ? (void*)fd : NULL;
 }
 
-int op_read(void *fd, void *buf, size_t size, void *arg) {
+ssize_t op_read(void *fd, void *buf, size_t size, void *arg) {
     return read((long)fd, buf, size);
 }
 
-int op_write(void *fd, void *buf, size_t size, void *arg) {
+ssize_t op_write(void *fd, void *buf, size_t size, void *arg) {
     return write((long)fd, buf, size);
 }
 
