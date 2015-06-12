@@ -111,12 +111,18 @@ typedef struct __fp_session {
 
 static bool readn(fp_session *session, void *buf, int n) {
     int sd = session->sd;
-    int ret = read(sd, buf, n);
-    ss_logger *logger = session->logger;
+    int idx = 0;
 
-    // TODO 0 か -1 を返すまで読み込みを繰り返す。
-    if (ret < n) {
-        ss_err(logger, "failed to read %d bytes from client\n", n);
+    while (idx < n) {
+        int ret = read(sd, buf + idx, n - idx);
+        if (ret <= 0) {
+            break;
+        }
+        idx += ret;
+    }
+
+    if (idx < n) {
+        ss_err(session->logger, "failed to read %d bytes from client\n", n);
         return false;
     } else {
         return true;
@@ -125,12 +131,18 @@ static bool readn(fp_session *session, void *buf, int n) {
 
 static bool writen(fp_session *session, const void *buf, int n) {
     int sd = session->sd;
-    int ret = write(sd, buf, n);
-    ss_logger *logger = session->logger;
+    int idx = 0;
 
-    // TODO -1 を返すまで書き込みを繰り返す。
-    if (ret < n) {
-        ss_err(logger, "failed to write %d bytes to client\n", n);
+    while (idx < n) {
+        int ret = write(sd, buf + idx, n - idx);
+        if (ret <= 0) {
+            break;
+        }
+        idx += ret;
+    }
+
+    if (idx < n) {
+        ss_err(session->logger, "failed to write %d bytes to client\n", n);
         return false;
     } else {
         return true;
