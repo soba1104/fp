@@ -455,10 +455,18 @@ static bool session_process_read(fp_session *session) {
             break;
         }
     }
+    if (idx == len) {
+        // 指定されたサイズ分送り終わった場合、
+        // read に成功したことは自明なので、
+        // 読み込み完了のメッセージは送らない。
+        goto out;
+    }
+
     if (!writen(session, &fin, sizeof(fin))) {
         ss_err(logger, "failed to write response header\n", strerror(errno));
         goto err;
     }
+out:
 
     return true;
 
