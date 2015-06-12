@@ -582,7 +582,7 @@ static bool session_process_seek(fp_session *session) {
     void *fd = session->fd;
     const char *errmsg = NULL;
     uint64_t response;
-    int64_t errlen, errhdr, rsphdr = sizeof(response);
+    int64_t errlen, errhdr, rsphdr = htonll(sizeof(response));
     off_t newpos;
 
     if (!readn(session, &whence_fp, sizeof(whence_fp))) {
