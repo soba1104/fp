@@ -560,7 +560,7 @@ bool is_seek_pos_in_buffer(off_t bufend, off_t offset) {
  *  - type: seek のタイプ、8バイト
  *  - offset: シーク先のオフセット、8バイト
  * - 出力
- *  - 常に8バイトの0を返す。
+ *  - シーク後のファイル先頭からの位置を8バイトで返す。
  *  - seek の失敗時はセッションを切る。
  */
 static bool session_process_seek(fp_session *session) {
@@ -573,7 +573,8 @@ static bool session_process_seek(fp_session *session) {
     void *ops_arg = session->ops_arg;
     void *fd = session->fd;
     const char *errmsg = NULL;
-    int64_t errlen, errhdr, rsphdr = 0;
+    uint64_t response;
+    int64_t errlen, errhdr, rsphdr = sizeof(response);
     off_t newpos;
 
     if (!readn(session, &whence_fp, sizeof(whence_fp))) {
@@ -638,6 +639,11 @@ static bool session_process_seek(fp_session *session) {
 out:
     if (!writen(session, &rsphdr, sizeof(rsphdr))) {
         ss_err(logger, "failed to write response header\n", strerror(errno));
+        goto err;
+    }
+    response = htonll(session->pos - (session->bufend - session->bufstart));
+    if (!writen(session, &response, sizeof(response))) {
+        ss_err(logger, "failed to write response\n", strerror(errno));
         goto err;
     }
 
