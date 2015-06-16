@@ -741,11 +741,11 @@ out:
             ss_err(logger, "failed to write response header\n", strerror(errno));
             goto err;
         }
-    }
-    response = htonll(session->pos - (session->bufend - session->bufstart));
-    if (!writen(session, &response, sizeof(response))) {
-        ss_err(logger, "failed to write response\n", strerror(errno));
-        goto err;
+        response = htonll(session->pos - (session->bufend - session->bufstart));
+        if (!writen(session, &response, sizeof(response))) {
+            ss_err(logger, "failed to write response\n", strerror(errno));
+            goto err;
+        }
     }
 
     return true;
