@@ -32,7 +32,9 @@
 #define FP_CMD_OPEN FP_CMD("open\0\0\0\0")
 #define FP_CMD_CREATE FP_CMD("create\0\0")
 #define FP_CMD_READ FP_CMD("read\0\0\0\0")
+#define FP_CMD_PREAD FP_CMD("pread\0\0\0")
 #define FP_CMD_WRITE FP_CMD("write\0\0\0")
+#define FP_CMD_PWRITE FP_CMD("pwrite\0\0")
 #define FP_CMD_SEEK FP_CMD("seek\0\0\0\0")
 #define FP_CMD_CLOSE FP_CMD("close\0\0\0")
 #define FP_CMD_DELETE FP_CMD("delete\0\0")
@@ -108,6 +110,8 @@ typedef struct __fp_session {
     fp_ops *ops;
     void *ops_arg;
 } fp_session;
+
+static bool session_process_seek(fp_session *session, bool need_response);
 
 static bool readn(fp_session *session, void *buf, int n) {
     int sd = session->sd;
@@ -392,7 +396,6 @@ err:
     return false;
 }
 
-
 /**
  * - 入力
  *  - command: read\0\0\0\0 の8バイト固定
@@ -493,6 +496,51 @@ err:
 
 /**
  * - 入力
+ *  - command: pread\0\0\0 の8バイト固定
+ *  - type: seek のタイプ、8バイト
+ *  - offset: シーク先のオフセット、8バイト
+ *  - len: 読み込む長さ、8バイト
+ * - 出力
+ *  - 以下のチャンクを繰り返し返す。len = 0 の場合はチャンク列の末端を示す。
+ *   - チャンク長の8バイト整数
+ *   - チャンク長分のデータ
+ *  - 1つめのチャンク長が0の場合はEOFであることを示す。
+ *  - seek もしくは read に失敗した場合はセッションを切る。
+ */
+static bool session_process_pread(fp_session *session) {
+    ss_logger *logger = session->logger;
+    const char *errmsg = NULL;
+    int64_t errlen, errhdr, rsphdr = 0;
+
+    if (!session_process_seek(session, false)) {
+        ss_err(logger, "pread: failed to seek: %s\n", strerror(errno));
+        errmsg = ERROR_SEEK_FAILURE;
+        errlen = sizeof(ERROR_SEEK_FAILURE) - 1;
+        errhdr = htonll(-errlen);
+        goto err;
+    }
+
+    if (!session_process_read(session)) {
+        ss_err(logger, "pread: failed to read: %s\n", strerror(errno));
+        errmsg = ERROR_READ_FAILURE;
+        errlen = sizeof(ERROR_READ_FAILURE) - 1;
+        errhdr = htonll(-errlen);
+        goto err;
+    }
+
+    return true;
+
+err:
+    if (errmsg) {
+        writen(session, &errhdr, sizeof(errhdr));
+        writen(session, errmsg, errlen);
+    }
+
+    return false;
+}
+
+/**
+ * - 入力
  *  - command: write\0\0\0 の8バイト固定
  *  - datalen: dataの長さ、8バイト
  *  - data: writeするデータ
@@ -551,6 +599,49 @@ err:
 }
 
 /**
+ * - 入力
+ *  - command: pwrite\0\0\0 の8バイト固定
+ *  - type: seek のタイプ、8バイト
+ *  - offset: シーク先のオフセット、8バイト
+ *  - datalen: dataの長さ、8バイト
+ *  - data: writeするデータ
+ * - 出力
+ *  - 常に8バイトの0を返す。
+ *  - seek もしくは write に失敗した場合はセッションを切る。
+ */
+static bool session_process_pwrite(fp_session *session) {
+    ss_logger *logger = session->logger;
+    const char *errmsg = NULL;
+    int64_t errlen, errhdr, rsphdr = 0;
+
+    if (!session_process_seek(session, false)) {
+        ss_err(logger, "pwrite: failed to seek: %s\n", strerror(errno));
+        errmsg = ERROR_SEEK_FAILURE;
+        errlen = sizeof(ERROR_SEEK_FAILURE) - 1;
+        errhdr = htonll(-errlen);
+        goto err;
+    }
+
+    if (!session_process_write(session)) {
+        ss_err(logger, "pwrite: failed to write: %s\n", strerror(errno));
+        errmsg = ERROR_WRITE_FAILURE;
+        errlen = sizeof(ERROR_WRITE_FAILURE) - 1;
+        errhdr = htonll(-errlen);
+        goto err;
+    }
+
+    return true;
+
+err:
+    if (errmsg) {
+        writen(session, &errhdr, sizeof(errhdr));
+        writen(session, errmsg, errlen);
+    }
+
+    return false;
+}
+
+/**
  * seek 先がバッファ内に含まれているかどうかを判定する。
  * - 引数
  *  - bufend: session->bufend の値
@@ -571,7 +662,7 @@ bool is_seek_pos_in_buffer(off_t bufend, off_t offset) {
  *  - 常に8バイトの0を返す。
  *  - seek の失敗時はセッションを切る。
  */
-static bool session_process_seek(fp_session *session) {
+static bool session_process_seek(fp_session *session, bool need_response) {
     ss_logger *logger = session->logger;
     int64_t whence_fp;
     int whence_sys;
@@ -644,17 +735,21 @@ static bool session_process_seek(fp_session *session) {
     session->bufend = 0;
     session->pos = newpos;
 out:
-    if (!writen(session, &rsphdr, sizeof(rsphdr))) {
-        ss_err(logger, "failed to write response header\n", strerror(errno));
-        goto err;
+    if (need_response) {
+        if (!writen(session, &rsphdr, sizeof(rsphdr))) {
+            ss_err(logger, "failed to write response header\n", strerror(errno));
+            goto err;
+        }
     }
 
     return true;
 
 err:
-    if (errmsg) {
-        writen(session, &errhdr, sizeof(errhdr));
-        writen(session, errmsg, errlen);
+    if (need_response) {
+        if (errmsg) {
+            writen(session, &errhdr, sizeof(errhdr));
+            writen(session, errmsg, errlen);
+        }
     }
 
     return false;
@@ -892,13 +987,23 @@ static void cbk(ss_logger *logger, int sd, void *arg) {
                 ss_err(logger, "failed to process read command\n");
                 goto out;
             }
+        } else if (cmd == FP_CMD_PREAD) {
+            if (!session_process_pread(&session)) {
+                ss_err(logger, "failed to process read command\n");
+                goto out;
+            }
         } else if (cmd == FP_CMD_WRITE) {
             if (!session_process_write(&session)) {
                 ss_err(logger, "failed to process write command\n");
                 goto out;
             }
+        } else if (cmd == FP_CMD_PWRITE) {
+            if (!session_process_pwrite(&session)) {
+                ss_err(logger, "failed to process pwrite command\n");
+                goto out;
+            }
         } else if (cmd == FP_CMD_SEEK) {
-            if (!session_process_seek(&session)) {
+            if (!session_process_seek(&session, true)) {
                 ss_err(logger, "failed to process seek command\n");
                 goto out;
             }
