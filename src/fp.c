@@ -1010,72 +1010,72 @@ static void cbk(ss_logger *logger, int sd, void *arg) {
     session.buf = malloc(FP_DEFAULT_BUFSIZE);
     if (!session.buf) {
         ss_err(logger, "failed to allocate client buffer\n");
-        goto out;
+        goto end;
     }
 
     if (setsockopt(session.sd, SOL_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay)) < 0) {
         ss_err(logger, "failed to set nodelay: %s\n", strerror(errno));
-        goto out;
+        goto end;
     }
 
     if (!session_start(&session)) {
-        goto out;
+        goto end;
     }
 
     if (session.fd == NULL) {
         // delete などの場合は特に続けて行える操作がないので接続を切る。
-        goto out;
+        goto end;
     }
 
     while ((cmd = readcmd(&session)) != 0) {
         if (cmd == FP_CMD_READ) {
             if (!session_process_read(&session)) {
                 ss_err(logger, "failed to process read command\n");
-                goto out;
+                goto end;
             }
         } else if (cmd == FP_CMD_PREAD) {
             if (!session_process_pread(&session)) {
                 ss_err(logger, "failed to process read command\n");
-                goto out;
+                goto end;
             }
         } else if (cmd == FP_CMD_WRITE) {
             if (!session_process_write(&session)) {
                 ss_err(logger, "failed to process write command\n");
-                goto out;
+                goto end;
             }
         } else if (cmd == FP_CMD_PWRITE) {
             if (!session_process_pwrite(&session)) {
                 ss_err(logger, "failed to process pwrite command\n");
-                goto out;
+                goto end;
             }
         } else if (cmd == FP_CMD_SEEK) {
             if (!session_process_seek(&session, true)) {
                 ss_err(logger, "failed to process seek command\n");
-                goto out;
+                goto end;
             }
         } else if (cmd == FP_CMD_SIZE) {
             if (!session_process_size(&session)) {
                 ss_err(logger, "failed to process size command\n");
-                goto out;
+                goto end;
             }
         } else if (cmd == FP_CMD_BUFSIZE) {
             if (!session_process_bufsize(&session)) {
                 ss_err(logger, "failed to process bufsize command\n");
-                goto out;
+                goto end;
             }
         } else if (cmd == FP_CMD_CLOSE) {
             if (!session_process_close(&session)) {
                 ss_err(logger, "failed to process close command\n");
             }
             session.fd = NULL;
-            goto out;
+            goto end;
         } else {
             ss_err(logger, "unknown command given, cmd = %x\n", cmd);
-            goto out;
+            goto end;
         }
     }
 
-out:
+end:
     if (session.buf) {
         free(session.buf);
     }
