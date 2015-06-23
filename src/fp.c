@@ -54,6 +54,7 @@
 #define ERROR_BUFSIZE_TOO_SMALL "bufsize_too_small"
 #define ERROR_BUFSIZE_FAILURE "bufsize_failure"
 #define ERROR_DF_FAILURE "df_failure"
+#define ERROR_CLOSE_FAILURE "close_failure"
 
 #define OPEN_FLAG_READ 'r'
 #define OPEN_FLAG_WRITE 'w'
@@ -510,7 +511,7 @@ err:
 static bool session_process_pread(fp_session *session) {
     ss_logger *logger = session->logger;
     const char *errmsg = NULL;
-    int64_t errlen, errhdr, rsphdr = 0;
+    int64_t errlen, errhdr;
 
     if (!session_process_seek(session, false)) {
         ss_err(logger, "pread: failed to seek: %s\n", strerror(errno));
@@ -612,7 +613,7 @@ err:
 static bool session_process_pwrite(fp_session *session) {
     ss_logger *logger = session->logger;
     const char *errmsg = NULL;
-    int64_t errlen, errhdr, rsphdr = 0;
+    int64_t errlen, errhdr;
 
     if (!session_process_seek(session, false)) {
         ss_err(logger, "pwrite: failed to seek: %s\n", strerror(errno));
@@ -908,6 +909,45 @@ err:
     return false;
 }
 
+/**
+ * - 入力
+ *  - command: close\0\0\0 の8バイト固定
+ * - 出力
+ *  - 常に8バイトの0を返す。
+ *  - close に失敗した場合はセッションを切る。
+ */
+static bool session_process_close(fp_session *session) {
+    ss_logger *logger = session->logger;
+    fp_close op_close = session->ops->close;
+    void *ops_arg = session->ops_arg;
+    void *fd = session->fd;
+    const char *errmsg = NULL;
+    int64_t errlen, errhdr, rsphdr = 0;
+
+    if (op_close(fd, ops_arg) < 0) {
+        ss_err(logger, "failed to close: %s\n", strerror(errno));
+        errmsg = ERROR_CLOSE_FAILURE;
+        errlen = sizeof(ERROR_CLOSE_FAILURE) - 1;
+        errhdr = htonll(-errlen);
+        goto err;
+    }
+
+    if (!writen(session, &rsphdr, sizeof(rsphdr))) {
+        ss_err(logger, "failed to write response header\n", strerror(errno));
+        goto err;
+    }
+
+    return true;
+
+err:
+    if (errmsg) {
+        writen(session, &errhdr, sizeof(errhdr));
+        writen(session, errmsg, errlen);
+    }
+
+    return false;
+}
+
 static bool session_start(fp_session *session) {
     uint64_t cmd = 0;
     ss_logger *logger = session->logger;
@@ -1024,6 +1064,10 @@ static void cbk(ss_logger *logger, int sd, void *arg) {
                 goto out;
             }
         } else if (cmd == FP_CMD_CLOSE) {
+            if (!session_process_close(&session)) {
+                ss_err(logger, "failed to process close command\n");
+            }
+            session.fd = NULL;
             goto out;
         } else {
             ss_err(logger, "unknown command given, cmd = %x\n", cmd);
