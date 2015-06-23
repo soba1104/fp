@@ -34,6 +34,7 @@ typedef struct __fp_ctx {
     ss_ctx ss;
     fp_ops ops;
     void *ops_arg;
+    int bufsize;
 } fp_ctx;
 
 bool fp_init(fp_ctx *ctx, fp_ops *ops, void *ops_arg);

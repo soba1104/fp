@@ -964,7 +964,7 @@ static void cbk(ss_logger *logger, int sd, void *arg) {
     session.fd = NULL;
     session.path = NULL;
     session.pos = 0;
-    session.bufsize = FP_DEFAULT_BUFSIZE;
+    session.bufsize = ctx->bufsize > 0 ? ctx->bufsize : FP_DEFAULT_BUFSIZE;
     session.bufstart = 0;
     session.bufend = 0;
     session.buf = malloc(FP_DEFAULT_BUFSIZE);
@@ -1046,7 +1046,12 @@ out:
 bool fp_init(fp_ctx *ctx, fp_ops *ops, void *ops_arg) {
     ctx->ops = *ops;
     ctx->ops_arg = ops_arg;
+    ctx->bufsize = 0;
     return ss_init(&ctx->ss, cbk, ctx);
+}
+
+void fp_set_default_bufsize(fp_ctx *ctx, int size) {
+    ctx->bufsize = size;
 }
 
 int fp_listen_tcp(fp_ctx *ctx, const char *ip, int port) {
