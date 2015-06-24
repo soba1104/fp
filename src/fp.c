@@ -101,7 +101,6 @@ static inline uint64_t htonll(uint64_t h) {
 typedef struct __fp_session {
     int sd;
     void *fd;
-    char *path;
     char *buf;
     int bufsize;
     int bufstart;
@@ -238,18 +237,11 @@ static bool session_process_open(fp_session *session) {
         ss_err(logger, "failed to read open path\n");
         goto err;
     }
+    buf[len] = '\0';
 
-    path = malloc(len + 1);
-    if (!path) {
-        ss_err(logger, "failed to allocate memory: %s\n", strerror(errno));
-        goto err;
-    }
-    memcpy(path, buf, len);
-    path[len] = '\0';
-
-    fd = op_open(path, flags_sys, ops_arg);
+    fd = op_open(buf, flags_sys, ops_arg);
     if (!fd) {
-        ss_err(logger, "failed to open %s: %s\n", path, strerror(errno));
+        ss_err(logger, "failed to open %s: %s\n", buf, strerror(errno));
         errmsg = ERROR_OPEN_FAILURE;
         errlen = sizeof(ERROR_OPEN_FAILURE) - 1;
         errhdr = htonll(-errlen);
@@ -260,10 +252,8 @@ static bool session_process_open(fp_session *session) {
         goto err;
     }
 
-    assert(!session->path);
     assert(session->fd == NULL);
     session->fd = fd;
-    session->path = path;
 
     return true;
 
@@ -306,18 +296,11 @@ static bool session_process_create(fp_session *session) {
         ss_err(logger, "failed to read create path\n");
         goto err;
     }
+    buf[len] = '\0';
 
-    path = malloc(len + 1);
-    if (!path) {
-        ss_err(logger, "failed to allocate memory: %s\n", strerror(errno));
-        goto err;
-    }
-    memcpy(path, buf, len);
-    path[len] = '\0';
-
-    fd = op_create(path, S_IRUSR | S_IWUSR | S_IRGRP, ops_arg);
+    fd = op_create(buf, S_IRUSR | S_IWUSR | S_IRGRP, ops_arg);
     if (!fd) {
-        ss_err(logger, "failed to create %s: %s\n", path, strerror(errno));
+        ss_err(logger, "failed to create %s: %s\n", buf, strerror(errno));
         errmsg = ERROR_CREATE_FAILURE;
         errlen = sizeof(ERROR_CREATE_FAILURE) - 1;
         errhdr = htonll(-errlen);
@@ -328,10 +311,8 @@ static bool session_process_create(fp_session *session) {
         goto err;
     }
 
-    assert(!session->path);
     assert(session->fd == NULL);
     session->fd = fd;
-    session->path = path;
 
     return true;
 
@@ -780,8 +761,7 @@ static bool session_process_size(fp_session *session) {
     hsize = op_size(fd, ops_arg);
     if (hsize < 0) {
         ss_err(logger,
-                "failed to get file size of %s: %s\n",
-                session->path,
+                "failed to get file size: %s\n",
                 strerror(errno));
         errmsg = ERROR_SIZE_FAILURE;
         errlen = sizeof(ERROR_SIZE_FAILURE) - 1;
@@ -1002,7 +982,6 @@ static void cbk(ss_logger *logger, int sd, void *arg) {
     session.logger = logger;
     session.sd = sd;
     session.fd = NULL;
-    session.path = NULL;
     session.pos = 0;
     session.bufsize = ctx->bufsize > 0 ? ctx->bufsize : FP_DEFAULT_BUFSIZE;
     session.bufstart = 0;
@@ -1078,9 +1057,6 @@ static void cbk(ss_logger *logger, int sd, void *arg) {
 end:
     if (session.buf) {
         free(session.buf);
-    }
-    if (session.path) {
-        free(session.path);
     }
     if (session.fd) {
         ops->close(session.fd, ops_arg);
