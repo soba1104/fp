@@ -55,6 +55,7 @@
 #define ERROR_BUFSIZE_FAILURE "bufsize_failure"
 #define ERROR_DF_FAILURE "df_failure"
 #define ERROR_CLOSE_FAILURE "close_failure"
+#define ERROR_TOO_LONG_FILEPATH "too_long_filepath"
 
 #define OPEN_FLAG_READ 'r'
 #define OPEN_FLAG_WRITE 'w'
@@ -232,6 +233,12 @@ static bool session_process_open(fp_session *session) {
         goto err;
     }
     len = ntohll(len);
+    if (len >= session->bufsize) {
+        errmsg = ERROR_TOO_LONG_FILEPATH;
+        errlen = sizeof(ERROR_TOO_LONG_FILEPATH) - 1;
+        errhdr = htonll(-errlen);
+        goto err;
+    }
     assert(buf);
     if (!readn(session, buf, len)) {
         ss_err(logger, "failed to read open path\n");
@@ -290,6 +297,12 @@ static bool session_process_create(fp_session *session) {
         goto err;
     }
     len = ntohll(len);
+    if (len >= session->bufsize) {
+        errmsg = ERROR_TOO_LONG_FILEPATH;
+        errlen = sizeof(ERROR_TOO_LONG_FILEPATH) - 1;
+        errhdr = htonll(-errlen);
+        goto err;
+    }
 
     assert(buf);
     if (!readn(session, buf, len)) {
@@ -347,6 +360,12 @@ static bool session_process_delete(fp_session *session) {
         goto err;
     }
     len = ntohll(len);
+    if (len >= session->bufsize) {
+        errmsg = ERROR_TOO_LONG_FILEPATH;
+        errlen = sizeof(ERROR_TOO_LONG_FILEPATH) - 1;
+        errhdr = htonll(-errlen);
+        goto err;
+    }
 
     assert(buf);
     if (!readn(session, buf, len)) {
