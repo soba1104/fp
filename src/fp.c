@@ -1010,7 +1010,7 @@ static void cbk(ss_logger *logger, int sd, void *arg) {
     session.bufsize = ctx->bufsize > 0 ? ctx->bufsize : FP_DEFAULT_BUFSIZE;
     session.bufstart = 0;
     session.bufend = 0;
-    session.buf = malloc(FP_DEFAULT_BUFSIZE);
+    session.buf = malloc(session.bufsize);
     if (!session.buf) {
         ss_err(logger, "failed to allocate client buffer\n");
         goto end;
