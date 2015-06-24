@@ -936,6 +936,11 @@ static bool session_process_close(fp_session *session) {
         goto err;
     }
 
+    session->fd = NULL;
+    session->pos = 0;
+    session->bufstart = 0;
+    session->bufend = 0;
+
     return true;
 
 err:
@@ -1065,7 +1070,6 @@ static void cbk(ss_logger *logger, int sd, void *arg) {
             if (!session_process_close(&session)) {
                 ss_err(logger, "failed to process close command\n");
             }
-            session.fd = NULL;
             goto end;
         } else {
             ss_err(logger, "unknown command given, cmd = %x\n", cmd);
