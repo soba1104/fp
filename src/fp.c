@@ -908,6 +908,17 @@ err:
     return false;
 }
 
+
+/**
+ * fd および buffer 管理に使用する状態をクリアする。
+ */
+static void clear_fd_and_buffer_state(fp_session *session) {
+    session->fd = NULL;
+    session->pos = 0;
+    session->bufstart = 0;
+    session->bufend = 0;
+}
+
 /**
  * - 入力
  *  - command: close\0\0\0 の8バイト固定
@@ -936,10 +947,7 @@ static bool session_process_close(fp_session *session) {
         goto err;
     }
 
-    session->fd = NULL;
-    session->pos = 0;
-    session->bufstart = 0;
-    session->bufend = 0;
+    clear_fd_and_buffer_state(session);
 
     return true;
 
@@ -948,6 +956,8 @@ err:
         writen(session, &errhdr, sizeof(errhdr));
         writen(session, errmsg, errlen);
     }
+
+    clear_fd_and_buffer_state(session);
 
     return false;
 }
