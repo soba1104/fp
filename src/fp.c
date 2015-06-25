@@ -1093,6 +1093,10 @@ bool fp_init(fp_ctx *ctx, fp_ops *ops, void *ops_arg) {
     return ss_init(&ctx->ss, cbk, ctx);
 }
 
+void fp_set_logger(fp_ctx *ctx, fp_logger logger, void *arg) {
+    ss_set_logger_cbk(&ctx->ss, logger, arg);
+}
+
 void fp_set_default_bufsize(fp_ctx *ctx, int size) {
     ctx->bufsize = size;
 }

@@ -8,6 +8,12 @@
 #include <sys/types.h>
 #include <sys/statvfs.h>
 
+static void logger(void *arg, const char *format, va_list ap) {
+    int fd = (int)arg;
+    dprintf(fd, "<file proxy log>: ");
+    vdprintf(fd, format, ap);
+}
+
 static void mkpdir(const char *path, mode_t mode) {
     char *dir = NULL;
     int len = strlen(path);
@@ -134,6 +140,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "failed to initialize\n");
         goto err;
     }
+    fp_set_logger(&ctx, logger, (void*)STDERR_FILENO);
 
     listen_sd = fp_listen_tcp(&ctx, "127.0.0.1", port);
     if (listen_sd < 0) {

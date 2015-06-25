@@ -3,6 +3,7 @@
 
 #include <ss.h>
 
+#include <stdarg.h>
 #include <stdbool.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -37,7 +38,10 @@ typedef struct __fp_ctx {
     int bufsize;
 } fp_ctx;
 
+typedef void (*fp_logger)(void *arg, const char *format, va_list ap);
+
 bool fp_init(fp_ctx *ctx, fp_ops *ops, void *ops_arg);
+void fp_set_logger(fp_ctx *ctx, fp_logger logger, void *arg);
 int fp_listen_tcp(fp_ctx *ctx, const char *ip, int port);
 int fp_listen_uds(fp_ctx *ctx, const char *path);
 bool fp_run(fp_ctx *ctx, int listen_sd);
