@@ -1111,6 +1111,10 @@ void fp_set_default_bufsize(fp_ctx *ctx, int size) {
     ctx->bufsize = size;
 }
 
+void fp_set_thread_cache_size(fp_ctx *ctx, int size) {
+    ss_set_thread_cache_size(&ctx->ss, size);
+}
+
 int fp_listen_tcp(fp_ctx *ctx, const char *ip, int port) {
     return ss_listen_tcp(&ctx->ss, ip, port);
 }
