@@ -1107,6 +1107,10 @@ void fp_set_logger(fp_ctx *ctx, fp_logger logger, void *arg) {
     ss_set_logger_cbk(&ctx->ss, logger, arg);
 }
 
+void fp_set_log_level(fp_ctx *ctx, int level) {
+    ss_set_log_level(&ctx->ss, level);
+}
+
 void fp_set_default_bufsize(fp_ctx *ctx, int size) {
     ctx->bufsize = size;
 }

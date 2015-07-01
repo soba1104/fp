@@ -141,6 +141,7 @@ int main(int argc, char **argv) {
         goto err;
     }
     fp_set_logger(&ctx, logger, (void*)STDERR_FILENO);
+    fp_set_log_level(&ctx, FP_LOG_DEBUG);
     fp_set_thread_cache_size(&ctx, 0);
 
     listen_sd = fp_listen_tcp(&ctx, "127.0.0.1", port);
