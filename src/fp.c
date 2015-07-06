@@ -819,7 +819,7 @@ err:
  */
 static bool session_process_bufsize(fp_session *session) {
     ss_logger *logger = session->logger;
-    int64_t newbufsize, rsphdr = 0;
+    int64_t newbufsize, oldbufsize, rsphdr = 0;
     int64_t errlen, errhdr;
     const char *errmsg = NULL;
     char *newbuf = NULL;
@@ -829,13 +829,7 @@ static bool session_process_bufsize(fp_session *session) {
         goto err;
     }
     newbufsize = ntohll(newbufsize);
-
-    if (newbufsize < session->bufsize) {
-        errmsg = ERROR_BUFSIZE_TOO_SMALL;
-        errlen = sizeof(ERROR_BUFSIZE_TOO_SMALL) - 1;
-        errhdr = htonll(-errlen);
-        goto err;
-    }
+    oldbufsize = session->bufsize;
 
     newbuf = realloc(session->buf, newbufsize);
     if (!newbuf) {
@@ -847,6 +841,31 @@ static bool session_process_bufsize(fp_session *session) {
     }
     session->buf = newbuf;
     session->bufsize = newbufsize;
+
+    if (newbufsize < oldbufsize && session->bufend > 0) {
+        // 要求サイズが現在のバッファサイズより小さかった場合は、
+        // バッファ末尾の値が realloc によって破棄されてしまう。
+        // ファイルポインタは現在のバッファの終端よりも先を指しているので、
+        // クライアントが読んでいる位置まで seek してバッファを破棄する。
+        fp_seek op_seek = session->ops->seek;
+        void *ops_arg = session->ops_arg;
+        int bufrest = session->bufend - session->bufstart;
+        off_t newpos, offset;
+
+        assert(session->fd != NULL);
+        offset = session->pos - bufrest;
+        if ((newpos = op_seek(session->fd, offset, SEEK_SET, ops_arg)) < 0) {
+            ss_err(logger, "failed to reset position\n");
+            errmsg = ERROR_BUFSIZE_FAILURE;
+            errlen = sizeof(ERROR_BUFSIZE_FAILURE) - 1;
+            errhdr = htonll(-errlen);
+            goto err;
+        }
+        assert(offset == newpos);
+        session->pos = newpos;
+        session->bufstart = 0;
+        session->bufend = 0;
+    }
 
     if (!writen(session, &rsphdr, sizeof(rsphdr))) {
         ss_err(logger, "failed to write response header\n", strerror(errno));
