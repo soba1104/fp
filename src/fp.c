@@ -51,8 +51,8 @@
 #define ERROR_SEEK_FAILURE "seek_failure"
 #define ERROR_INVALID_SEEK_WHENCE "invalid_seek_whence"
 #define ERROR_SIZE_FAILURE "size_failure"
-#define ERROR_BUFSIZE_TOO_SMALL "bufsize_too_small"
-#define ERROR_BUFSIZE_FAILURE "bufsize_failure"
+#define ERROR_BUFSIZE_REALLOC_FAILURE "bufsize_realloc_failure"
+#define ERROR_BUFSIZE_SEEK_FAILURE "bufsize_seek_failure"
 #define ERROR_DF_FAILURE "df_failure"
 #define ERROR_CLOSE_FAILURE "close_failure"
 #define ERROR_TOO_LONG_FILEPATH "too_long_filepath"
@@ -834,8 +834,8 @@ static bool session_process_bufsize(fp_session *session) {
     newbuf = realloc(session->buf, newbufsize);
     if (!newbuf) {
         ss_err(logger, "failed to reallocate client buffer\n");
-        errmsg = ERROR_BUFSIZE_FAILURE;
-        errlen = sizeof(ERROR_BUFSIZE_FAILURE) - 1;
+        errmsg = ERROR_BUFSIZE_REALLOC_FAILURE;
+        errlen = sizeof(ERROR_BUFSIZE_REALLOC_FAILURE) - 1;
         errhdr = htonll(-errlen);
         goto err;
     }
@@ -856,8 +856,8 @@ static bool session_process_bufsize(fp_session *session) {
         offset = session->pos - bufrest;
         if ((newpos = op_seek(session->fd, offset, SEEK_SET, ops_arg)) < 0) {
             ss_err(logger, "failed to reset position\n");
-            errmsg = ERROR_BUFSIZE_FAILURE;
-            errlen = sizeof(ERROR_BUFSIZE_FAILURE) - 1;
+            errmsg = ERROR_BUFSIZE_SEEK_FAILURE;
+            errlen = sizeof(ERROR_BUFSIZE_SEEK_FAILURE) - 1;
             errhdr = htonll(-errlen);
             goto err;
         }
