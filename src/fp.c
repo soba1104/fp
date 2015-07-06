@@ -825,7 +825,7 @@ static bool session_process_bufsize(fp_session *session) {
     char *newbuf = NULL;
 
     if (!readn(session, &newbufsize, sizeof(newbufsize))) {
-        ss_err(logger, "failed to read new buffer sizen");
+        ss_err(logger, "failed to read new buffer size");
         goto err;
     }
     newbufsize = ntohll(newbufsize);
