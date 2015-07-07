@@ -187,22 +187,30 @@ void buf_free(fp_session *session) {
     }
 }
 
-bool buf_realloc(fp_session *session, int newbufsize) {
-    char *newbuf = realloc(session->buf, newbufsize);
-    if (!newbuf) {
-        return false;
-    }
-    session->buf = newbuf;
-    session->bufsize = newbufsize;
-    return true;
-}
-
 int buf_rest(fp_session *session) {
     if (session->buf) {
         return session->bufend - session->bufstart;
     } else {
         return 0;
     }
+}
+
+bool buf_realloc(fp_session *session, int newbufsize) {
+    char *newbuf;
+    int oldbufsize = session->bufsize;
+
+    ss_debug(session->logger, "realloc buffer %d -> %d\n", oldbufsize, newbufsize);
+    if (newbufsize < oldbufsize && buf_rest(session) > 0) {
+        ss_err(session->logger, "buffer must be empty when realloc to smaller size\n");
+        return false;
+    }
+    newbuf = realloc(session->buf, newbufsize);
+    if (!newbuf) {
+        return false;
+    }
+    session->buf = newbuf;
+    session->bufsize = newbufsize;
+    return true;
 }
 
 void buf_empty(fp_session *session) {
