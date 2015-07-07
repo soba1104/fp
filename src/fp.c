@@ -205,6 +205,11 @@ int buf_rest(fp_session *session) {
     }
 }
 
+void buf_empty(fp_session *session) {
+    session->bufstart = 0;
+    session->bufend = 0;
+}
+
 /**
  * - 入力
  *  - command: open\0\0\0\0 の8バイト固定
@@ -490,8 +495,7 @@ static bool session_process_read(fp_session *session) {
             break;
         }
         assert(session->bufstart == session->bufend);
-        session->bufstart = 0;
-        session->bufend = 0;
+        buf_empty(session);
 
         s = op_read(fd, session->buf, bufsize, ops_arg);
         if (s < 0) {
@@ -769,8 +773,7 @@ static bool session_process_seek(fp_session *session, bool need_response) {
         errhdr = htonll(-errlen);
         goto err;
     }
-    session->bufstart = 0;
-    session->bufend = 0;
+    buf_empty(session);
     session->pos = newpos;
 out:
     if (need_response) {
@@ -887,8 +890,7 @@ static bool session_process_bufsize(fp_session *session) {
         }
         assert(offset == newpos);
         session->pos = newpos;
-        session->bufstart = 0;
-        session->bufend = 0;
+        buf_empty(session);
     }
 
     if (!buf_realloc(session, newbufsize)) {
@@ -966,8 +968,7 @@ err:
 static void clear_fd_and_buffer_state(fp_session *session) {
     session->fd = NULL;
     session->pos = 0;
-    session->bufstart = 0;
-    session->bufend = 0;
+    buf_empty(session);
 }
 
 /**
