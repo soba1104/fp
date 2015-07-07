@@ -164,6 +164,29 @@ static uint64_t readcmd(fp_session *session) {
     }
 }
 
+bool buf_ensure(fp_session *session) {
+    if (!session->buf) {
+        assert(session->bufstart == 0);
+        assert(session->bufend == 0);
+        session->buf = malloc(session->bufsize);
+        ss_debug(session->logger, "allocate buffer\n");
+        if (!session->buf) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void buf_free(fp_session *session) {
+    if (session->buf) {
+        ss_debug(session->logger, "free buffer\n");
+        free(session->buf);
+        session->buf = NULL;
+        session->bufstart = 0;
+        session->bufend = 0;
+    }
+}
+
 /**
  * - 入力
  *  - command: open\0\0\0\0 の8バイト固定
@@ -1039,8 +1062,8 @@ static void cbk(ss_logger *logger, int sd, void *arg) {
     session.bufsize = ctx->bufsize > 0 ? ctx->bufsize : FP_DEFAULT_BUFSIZE;
     session.bufstart = 0;
     session.bufend = 0;
-    session.buf = malloc(session.bufsize);
-    if (!session.buf) {
+    session.buf = NULL;
+    if (!buf_ensure(&session)) {
         ss_err(logger, "failed to allocate client buffer\n");
         goto end;
     }
@@ -1107,9 +1130,7 @@ static void cbk(ss_logger *logger, int sd, void *arg) {
     }
 
 end:
-    if (session.buf) {
-        free(session.buf);
-    }
+    buf_free(&session);
     if (session.fd) {
         ops->close(session.fd, ops_arg);
     }
