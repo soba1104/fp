@@ -195,6 +195,11 @@ int buf_rest(fp_session *session) {
     }
 }
 
+void buf_empty(fp_session *session) {
+    session->bufstart = 0;
+    session->bufend = 0;
+}
+
 bool buf_realloc(fp_session *session, int newbufsize) {
     char *newbuf;
     int oldbufsize = session->bufsize;
@@ -210,12 +215,10 @@ bool buf_realloc(fp_session *session, int newbufsize) {
     }
     session->buf = newbuf;
     session->bufsize = newbufsize;
+    if (newbufsize < oldbufsize) {
+        buf_empty(session);
+    }
     return true;
-}
-
-void buf_empty(fp_session *session) {
-    session->bufstart = 0;
-    session->bufend = 0;
 }
 
 /**
