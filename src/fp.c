@@ -197,6 +197,14 @@ bool buf_realloc(fp_session *session, int newbufsize) {
     return true;
 }
 
+int buf_rest(fp_session *session) {
+    if (session->buf) {
+        return session->bufend - session->bufstart;
+    } else {
+        return 0;
+    }
+}
+
 /**
  * - 入力
  *  - command: open\0\0\0\0 の8バイト固定
@@ -859,26 +867,17 @@ static bool session_process_bufsize(fp_session *session) {
     newbufsize = ntohll(newbufsize);
     oldbufsize = session->bufsize;
 
-    if (!buf_realloc(session, newbufsize)) {
-        ss_err(logger, "failed to reallocate client buffer\n");
-        errmsg = ERROR_BUFSIZE_REALLOC_FAILURE;
-        errlen = sizeof(ERROR_BUFSIZE_REALLOC_FAILURE) - 1;
-        errhdr = htonll(-errlen);
-        goto err;
-    }
-
-    if (newbufsize < oldbufsize && session->bufend > 0) {
+    if (newbufsize < oldbufsize && buf_rest(session) > 0) {
         // 要求サイズが現在のバッファサイズより小さかった場合は、
         // バッファ末尾の値が realloc によって破棄されてしまう。
         // ファイルポインタは現在のバッファの終端よりも先を指しているので、
         // クライアントが読んでいる位置まで seek してバッファを破棄する。
         fp_seek op_seek = session->ops->seek;
         void *ops_arg = session->ops_arg;
-        int bufrest = session->bufend - session->bufstart;
         off_t newpos, offset;
 
         assert(session->fd != NULL);
-        offset = session->pos - bufrest;
+        offset = session->pos - buf_rest(session);
         if ((newpos = op_seek(session->fd, offset, SEEK_SET, ops_arg)) < 0) {
             ss_err(logger, "failed to reset position\n");
             errmsg = ERROR_BUFSIZE_SEEK_FAILURE;
@@ -890,6 +889,14 @@ static bool session_process_bufsize(fp_session *session) {
         session->pos = newpos;
         session->bufstart = 0;
         session->bufend = 0;
+    }
+
+    if (!buf_realloc(session, newbufsize)) {
+        ss_err(logger, "failed to reallocate client buffer\n");
+        errmsg = ERROR_BUFSIZE_REALLOC_FAILURE;
+        errlen = sizeof(ERROR_BUFSIZE_REALLOC_FAILURE) - 1;
+        errhdr = htonll(-errlen);
+        goto err;
     }
 
     if (!writen(session, &rsphdr, sizeof(rsphdr))) {
