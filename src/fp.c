@@ -187,6 +187,16 @@ void buf_free(fp_session *session) {
     }
 }
 
+bool buf_realloc(fp_session *session, int newbufsize) {
+    char *newbuf = realloc(session->buf, newbufsize);
+    if (!newbuf) {
+        return false;
+    }
+    session->buf = newbuf;
+    session->bufsize = newbufsize;
+    return true;
+}
+
 /**
  * - 入力
  *  - command: open\0\0\0\0 の8バイト固定
@@ -849,16 +859,13 @@ static bool session_process_bufsize(fp_session *session) {
     newbufsize = ntohll(newbufsize);
     oldbufsize = session->bufsize;
 
-    newbuf = realloc(session->buf, newbufsize);
-    if (!newbuf) {
+    if (!buf_realloc(session, newbufsize)) {
         ss_err(logger, "failed to reallocate client buffer\n");
         errmsg = ERROR_BUFSIZE_REALLOC_FAILURE;
         errlen = sizeof(ERROR_BUFSIZE_REALLOC_FAILURE) - 1;
         errhdr = htonll(-errlen);
         goto err;
     }
-    session->buf = newbuf;
-    session->bufsize = newbufsize;
 
     if (newbufsize < oldbufsize && session->bufend > 0) {
         // 要求サイズが現在のバッファサイズより小さかった場合は、
