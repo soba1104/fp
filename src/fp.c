@@ -198,7 +198,6 @@ void buf_free(fp_session *session) {
  *  - open の失敗時はセッションを切る。
  */
 static bool session_process_open(fp_session *session) {
-    char *buf = session->buf;
     char *path = NULL;
     char flags_fp[sizeof(uint64_t)];
     ss_logger *logger = session->logger;
@@ -262,16 +261,16 @@ static bool session_process_open(fp_session *session) {
         errhdr = htonll(-errlen);
         goto err;
     }
-    assert(buf);
-    if (!readn(session, buf, len)) {
+    assert(session->buf);
+    if (!readn(session, session->buf, len)) {
         ss_err(logger, "failed to read open path\n");
         goto err;
     }
-    buf[len] = '\0';
+    session->buf[len] = '\0';
 
-    fd = op_open(buf, flags_sys, ops_arg);
+    fd = op_open(session->buf, flags_sys, ops_arg);
     if (!fd) {
-        ss_err(logger, "failed to open %s: %s\n", buf, strerror(errno));
+        ss_err(logger, "failed to open %s: %s\n", session->buf, strerror(errno));
         errmsg = ERROR_OPEN_FAILURE;
         errlen = sizeof(ERROR_OPEN_FAILURE) - 1;
         errhdr = htonll(-errlen);
@@ -305,7 +304,6 @@ err:
  *  - create の失敗時はセッションを切る。
  */
 static bool session_process_create(fp_session *session) {
-    char *buf = session->buf;
     char *path = NULL;
     ss_logger *logger = session->logger;
     uint64_t len;
@@ -327,16 +325,16 @@ static bool session_process_create(fp_session *session) {
         goto err;
     }
 
-    assert(buf);
-    if (!readn(session, buf, len)) {
+    assert(session->buf);
+    if (!readn(session, session->buf, len)) {
         ss_err(logger, "failed to read create path\n");
         goto err;
     }
-    buf[len] = '\0';
+    session->buf[len] = '\0';
 
-    fd = op_create(buf, S_IRUSR | S_IWUSR | S_IRGRP, ops_arg);
+    fd = op_create(session->buf, S_IRUSR | S_IWUSR | S_IRGRP, ops_arg);
     if (!fd) {
-        ss_err(logger, "failed to create %s: %s\n", buf, strerror(errno));
+        ss_err(logger, "failed to create %s: %s\n", session->buf, strerror(errno));
         errmsg = ERROR_CREATE_FAILURE;
         errlen = sizeof(ERROR_CREATE_FAILURE) - 1;
         errhdr = htonll(-errlen);
@@ -370,7 +368,6 @@ err:
  *  - delete の失敗時はセッションを切る。
  */
 static bool session_process_delete(fp_session *session) {
-    char *buf = session->buf;
     ss_logger *logger = session->logger;
     uint64_t len;
     fp_delete op_delete = session->ops->delete;
@@ -390,15 +387,15 @@ static bool session_process_delete(fp_session *session) {
         goto err;
     }
 
-    assert(buf);
-    if (!readn(session, buf, len)) {
+    assert(session->buf);
+    if (!readn(session, session->buf, len)) {
         ss_err(logger, "failed to read delete path\n");
         goto err;
     }
-    buf[len] = '\0';
+    session->buf[len] = '\0';
 
-    if (op_delete(buf, ops_arg) < 0) {
-        ss_err(logger, "failed to delete %s: %s\n", buf, strerror(errno));
+    if (op_delete(session->buf, ops_arg) < 0) {
+        ss_err(logger, "failed to delete %s: %s\n", session->buf, strerror(errno));
         errmsg = ERROR_DELETE_FAILURE;
         errlen = sizeof(ERROR_DELETE_FAILURE) - 1;
         errhdr = htonll(-errlen);
@@ -432,7 +429,6 @@ err:
  *  - read に失敗した場合はセッションを切る。
  */
 static bool session_process_read(fp_session *session) {
-    char *buf = session->buf;
     int bufsize = session->bufsize;
     ss_logger *logger = session->logger;
     uint64_t len, idx;
@@ -448,7 +444,7 @@ static bool session_process_read(fp_session *session) {
     }
     len = ntohll(len);
 
-    assert(buf);
+    assert(session->buf);
     idx = 0;
     while (true) {
         int64_t require = len - idx;
@@ -464,7 +460,7 @@ static bool session_process_read(fp_session *session) {
                 ss_err(logger, "failed to write response header\n", strerror(errno));
                 goto err;
             }
-            if (!writen(session, buf + session->bufstart, reth)) {
+            if (!writen(session, session->buf + session->bufstart, reth)) {
                 ss_err(logger, "failed to write response data\n", strerror(errno));
                 goto err;
             }
@@ -479,7 +475,7 @@ static bool session_process_read(fp_session *session) {
         session->bufstart = 0;
         session->bufend = 0;
 
-        s = op_read(fd, buf, bufsize, ops_arg);
+        s = op_read(fd, session->buf, bufsize, ops_arg);
         if (s < 0) {
             ss_err(logger, "failed to read data: %s\n", strerror(errno));
             errmsg = ERROR_READ_FAILURE;
@@ -573,7 +569,6 @@ err:
  *  - write の失敗時はセッションを切る。
  */
 static bool session_process_write(fp_session *session) {
-    char *buf = session->buf;
     int bufsize = session->bufsize;
     ss_logger *logger = session->logger;
     uint64_t len, idx;
@@ -589,15 +584,15 @@ static bool session_process_write(fp_session *session) {
     }
     len = ntohll(len);
 
-    assert(buf);
+    assert(session->buf);
     for (idx = 0; idx < len; idx += bufsize) {
         int s = min(len - idx, bufsize);
         int r;
-        if (!readn(session, buf, s)) {
+        if (!readn(session, session->buf, s)) {
             ss_err(logger, "failed to read write data\n");
             goto err;
         }
-        if ((r = op_write(fd, buf, s, ops_arg)) < 0) {
+        if ((r = op_write(fd, session->buf, s, ops_arg)) < 0) {
             ss_err(logger, "failed to write data: %s\n", strerror(errno));
             errmsg = ERROR_WRITE_FAILURE;
             errlen = sizeof(ERROR_WRITE_FAILURE) - 1;
