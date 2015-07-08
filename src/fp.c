@@ -33,6 +33,7 @@
 #define FP_CMD_CREATE FP_CMD("create\0\0")
 #define FP_CMD_READ FP_CMD("read\0\0\0\0")
 #define FP_CMD_PREAD FP_CMD("pread\0\0\0")
+#define FP_CMD_PREAD2 FP_CMD("pread2\0\0")
 #define FP_CMD_WRITE FP_CMD("write\0\0\0")
 #define FP_CMD_PWRITE FP_CMD("pwrite\0\0")
 #define FP_CMD_SEEK FP_CMD("seek\0\0\0\0")
@@ -49,6 +50,7 @@
 #define ERROR_READ_FAILURE "read_failure"
 #define ERROR_WRITE_FAILURE "write_failure"
 #define ERROR_SEEK_FAILURE "seek_failure"
+#define ERROR_PREAD_FAILURE "pread_failure"
 #define ERROR_INVALID_SEEK_WHENCE "invalid_seek_whence"
 #define ERROR_SIZE_FAILURE "size_failure"
 #define ERROR_BUFSIZE_REALLOC_FAILURE "bufsize_realloc_failure"
@@ -534,8 +536,8 @@ static bool session_process_read(fp_session *session) {
         ss_err(logger, "failed to write response header\n", strerror(errno));
         goto err;
     }
-out:
 
+out:
     return true;
 
 err:
@@ -581,6 +583,100 @@ static bool session_process_pread(fp_session *session) {
         goto err;
     }
 
+    return true;
+
+err:
+    if (errmsg) {
+        writen(session, &errhdr, sizeof(errhdr));
+        writen(session, errmsg, errlen);
+    }
+
+    return false;
+}
+
+/**
+ * - 入力
+ *  - command: pread2\0\0 の8バイト固定
+ *  - offset: シーク先のファイル先頭からのオフセット、8バイト
+ *  - len: 読み込む長さ、8バイト
+ * - 出力
+ *  - 以下のチャンクを繰り返し返す。len = 0 の場合はチャンク列の末端を示す。
+ *   - チャンク長の8バイト整数
+ *   - チャンク長分のデータ
+ *  - 1つめのチャンク長が0の場合はEOFであることを示す。
+ *  - seek もしくは read に失敗した場合はセッションを切る。
+ */
+static bool session_process_pread2(fp_session *session) {
+    ss_logger *logger = session->logger;
+    fp_pread op_pread = session->ops->pread;
+    void *ops_arg = session->ops_arg;
+    void *fd = session->fd;
+    int64_t offset_fp;
+    off_t offset_sys;
+    uint64_t len, idx;
+    const char *errmsg = NULL;
+    int64_t errlen, errhdr, fin = 0;
+
+
+    if (!readn(session, &offset_fp, sizeof(offset_fp))) {
+        ss_err(logger, "failed to read pread offset\n");
+        goto err;
+    }
+    offset_fp = ntohll(offset_fp);
+    offset_sys = (off_t)offset_fp;
+
+    if (!readn(session, &len, sizeof(len))) {
+        ss_err(logger, "failed to read pread length\n");
+        goto err;
+    }
+    len = ntohll(len);
+
+    assert(session->buf);
+    idx = 0;
+    while (idx < len) {
+        int64_t require = len - idx;
+        size_t toread = min(session->bufsize, require);
+        int s;
+
+        s = op_pread(fd, session->buf, toread, offset_sys + idx, ops_arg);
+        if (s > 0) {
+            int64_t reth = s;
+            int64_t retn = htonll(reth);
+
+            // TODO writev でまとめて書き込む
+            if (!writen(session, &retn, sizeof(retn))) {
+                ss_err(logger, "failed to write response header\n", strerror(errno));
+                goto err;
+            }
+            if (!writen(session, session->buf, reth)) {
+                ss_err(logger, "failed to write response data\n", strerror(errno));
+                goto err;
+            }
+            idx += s;
+        } else if (s == 0) {
+            break; // EOF
+        } else {
+            ss_err(logger, "failed to pread data: %s\n", strerror(errno));
+            errmsg = ERROR_PREAD_FAILURE;
+            errlen = sizeof(ERROR_PREAD_FAILURE) - 1;
+            errhdr = htonll(-errlen);
+            goto err;
+        }
+    }
+
+    if (idx == len) {
+        // 指定されたサイズ分送り終わった場合、
+        // read に成功したことは自明なので、
+        // 読み込み完了のメッセージは送らない。
+        goto out;
+    }
+
+    if (!writen(session, &fin, sizeof(fin))) {
+        ss_err(logger, "failed to write response header\n", strerror(errno));
+        goto err;
+    }
+
+out:
     return true;
 
 err:
@@ -1111,7 +1207,12 @@ static void cbk(ss_logger *logger, int sd, void *arg) {
             }
         } else if (cmd == FP_CMD_PREAD) {
             if (!session_process_pread(&session)) {
-                ss_err(logger, "failed to process read command\n");
+                ss_err(logger, "failed to process pread command\n");
+                goto end;
+            }
+        } else if (cmd == FP_CMD_PREAD2) {
+            if (!session_process_pread2(&session)) {
+                ss_err(logger, "failed to process pread2 command\n");
                 goto end;
             }
         } else if (cmd == FP_CMD_WRITE) {

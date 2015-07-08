@@ -74,6 +74,10 @@ off_t op_seek(void *fd, off_t offset, int whence, void *arg) {
     return lseek((long)fd, offset, whence);
 }
 
+ssize_t op_pread(void *fd, void *buf, size_t size, off_t offset, void *arg) {
+    return pread((long)fd, buf, size, offset);
+}
+
 int op_close(void *fd, void *arg) {
     return close((long)fd);
 }
@@ -113,6 +117,7 @@ int main(int argc, char **argv) {
     ops.read = op_read;
     ops.write = op_write;
     ops.seek = op_seek;
+    ops.pread = op_pread;
     ops.close = op_close;
     ops.size = op_size;
     ops.df = op_df;
