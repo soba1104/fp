@@ -169,7 +169,7 @@ bool buf_ensure(fp_session *session) {
         assert(session->bufstart == 0);
         assert(session->bufend == 0);
         session->buf = malloc(session->bufsize);
-        ss_debug(session->logger, "allocate buffer\n");
+        ss_debug(session->logger, "allocate buffer(%d bytes)\n", session->bufsize);
         if (!session->buf) {
             return false;
         }
@@ -179,7 +179,7 @@ bool buf_ensure(fp_session *session) {
 
 void buf_free(fp_session *session) {
     if (session->buf) {
-        ss_debug(session->logger, "free buffer\n");
+        ss_debug(session->logger, "free buffer(%d bytes)\n", session->bufsize);
         free(session->buf);
         session->buf = NULL;
         session->bufstart = 0;
