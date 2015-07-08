@@ -605,6 +605,8 @@ err:
  *   - チャンク長分のデータ
  *  - 1つめのチャンク長が0の場合はEOFであることを示す。
  *  - seek もしくは read に失敗した場合はセッションを切る。
+ * - 注意点
+ *  - pread2 を使った後は、seek を使うまで read, pread の結果がおかしくなる。
  */
 static bool session_process_pread2(fp_session *session) {
     ss_logger *logger = session->logger;
